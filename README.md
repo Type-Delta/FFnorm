@@ -7,8 +7,12 @@ for normalizing large batch of files.
 
 ## Installation
 
-The only dependencies required is **FFmpeg** and **Node.js** (for running the source code).
-didn't have them? Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.org/en/download).
+Required dependencies are **FFmpeg**, **AWK** and **Node.js** (if using Executables, Node.js is **unnecessary**).
+didn't have them?
+
+Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.org/en/download).
+
+for **AWK** see [installation guide](https://bobbyhadz.com/blog/install-awk-on-windows)
 
 ## Usage
 you can either run the Executable directly:
