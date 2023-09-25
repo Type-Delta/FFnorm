@@ -1,4 +1,4 @@
-# FFnorm.js
+# FFnorm
 
 automatic audio Normalization tool
 powered by **FFmpeg**
