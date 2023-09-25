@@ -5,7 +5,7 @@
  *
  * FFmpeg Commands use:
  * - getting audio loudness
- * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk '/I:/{print $2}'`
+ * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}""`
  * - modifying audio Gains
  * > ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=GAINdB" -id3v2_version 3 -c:v copy ouput.wav
  *
@@ -347,7 +347,7 @@ async function normalizeFiles(folder, filesObj){
 
 function getloudness(filePath){
    return new Promise((resolve, reject) => {
-      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | awk '/I:/{print $2}'`, (err, stdout, stderr) => {
+      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`, (err, stdout, stderr) => {
          if(err||stderr) console.error(err, stderr);
          eventEmitter.emit('scanloop', 1);
          resolve(parseFloat(stdout));
