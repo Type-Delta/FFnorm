@@ -10,7 +10,7 @@ for normalizing large batch of files.
 Required dependencies are **FFmpeg**, **AWK** and **Node.js** (if using Executables, Node.js is **unnecessary**).
 didn't have them?
 
-Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.org/en/download).
+Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.org/en/download)
 
 for **AWK** see [installation guide](https://bobbyhadz.com/blog/install-awk-on-windows)
 
@@ -37,7 +37,7 @@ ffnorm scan -i "path/to/input/folder" --target -9
 **FFnorm** will mark how far-off each file's loudness from **Target**
 ![Output Image](img/promt01.png)
 
-#### Nomalize Files
+#### Normalize Files
 lets start by normalizing a single Video file,
 we defined **Max Offset** to `2LUFS` meaning if this file is only `2LUFS` away
 from default **Target loudness** (-14.4LUFS) it would be skiped.
