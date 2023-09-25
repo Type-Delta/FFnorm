@@ -4,7 +4,7 @@
  * for normalizing large batch of files
  *
  * FFmpeg Commands use:
- * - getting audio loundness
+ * - getting audio loudness
  * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk '/I:/{print $2}'`
  * - modifying audio Gains
  * > `ffmpeg -hide_banner -y -i input.wav -af "volume=GAINdB" ouput.wav`
@@ -79,7 +79,7 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    (if none set will use the last command-line argument as output)
 
    ${ncc('bgWhite')+ncc('black')}  'norm', '--norm', '-n'  ${ncc()}
-   Normalize mode - scan Audio loundness of file/folder contents
+   Normalize mode - scan Audio loudness of file/folder contents
    and normalize them according to the Target loudness set by '-t' option.
    (this option requires Output path)
 
@@ -95,7 +95,7 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    (default to 1.3LUFS)
 
    ${ncc('bgWhite')+ncc('black')}  '-r', '--ratio'  ${ncc()}
-   How much Nomalization is apply in percentage, 1.0 is 100%
+   How much Normalization is apply in percentage, 1.0 is 100%
    lower this value to prevent over-shooting
    (default to 0.78)
 
@@ -150,7 +150,7 @@ if(args.mode_scan){
    scanMode();
 }else{
    if(!args.mode_norm)
-      console.log(`${ncc('yellow')}No Mode selected, default to ${ncc('magenta')}Nomalize${ncc()}`);
+      console.log(`${ncc('yellow')}No Mode selected, default to ${ncc('magenta')}Normalize${ncc()}`);
    if(!args.output)
       throw new Error('output file/folder is required for this mode!');
    if(path.normalize(args.input) == path.normalize(args.output))
@@ -188,11 +188,11 @@ async function scanMode(){
    ).filter(n => isSupportedFile(n)));
    scTotal = fileNames.length;
 
-   const ln = await scanFilesLoundness(args.input, fileNames);
+   const ln = await scanFilesloudness(args.input, fileNames);
 
-   console.log(`\n${ncc('green')}Scanning Compleated${ncc()}\n------------------------------------------------------------------------------------------------------------------------------------------\n${ncc('magenta')}No.\t `+`Name`.padEnd(100, ' ') + `Loundness\tDelta`);
+   console.log(`\n${ncc('green')}Scan Completed${ncc()}\n------------------------------------------------------------------------------------------------------------------------------------------\n${ncc('magenta')}No.\t `+`Name`.padEnd(100, ' ') + `loudness\tDelta`);
    for(let i = 0; i < ln.length; i++){
-      const delta = Math.abs(ln[i].loundness - args.tagetLUFS);
+      const delta = Math.abs(ln[i].loudness - args.tagetLUFS);
       let color;
       switch(nearestNumber([args.LUFSMaxOffset, args.LUFSMaxOffset + 3, args.LUFSMaxOffset + 6], delta)){
          case 0:
@@ -206,7 +206,7 @@ async function scanMode(){
             break;
       }
       console.log(
-         `${ncc()}${i + 1}.\t` + `${ln[i].name}`.padEnd(100, ' ') + `${color}${ln[i].loundness}LUFS\t${(ln[i].loundness - args.tagetLUFS).toFixed(1)}LUFS`
+         `${ncc()}${i + 1}.\t` + `${ln[i].name}`.padEnd(100, ' ') + `${color}${ln[i].loudness}LUFS\t${(ln[i].loudness - args.tagetLUFS).toFixed(1)}LUFS`
       );
    }
 
@@ -220,9 +220,12 @@ async function normMode(){
       if(!args.output.endsWith('/')&&!args.output.endsWith('\\'))
          throw new Error('output folder must ends with \'/\' or \'\\\'');
 
-      if(!fs.existsSync(args.output))
-         fs.mkdirSync(args.output, { recursive: true });
-
+      try{
+         if(!fs.existsSync(args.output))
+            fs.mkdirSync(args.output, { recursive: true });
+      }catch(err){
+         throw new Error(`Cannot create folder ${args.output}:\n${err}`);
+      }
    }
 
 
@@ -243,7 +246,7 @@ async function normMode(){
    scTotal = fileNames.length;
 
 
-   const ln = await scanFilesLoundness(args.input, fileNames, true);
+   const ln = await scanFilesloudness(args.input, fileNames, true);
 
    /**check for file with litle to no loudness
     * since just normalizing won't do much anyways
@@ -251,11 +254,11 @@ async function normMode(){
     */
    let filesWithNosound = [];
    ln.map(value => {
-      if(value.loundness < -30) {
+      if(value.loudness < -30) {
          filesWithNosound.push(value);
          return value;
       }
-      else return value.normalize = (args.tagetLUFS - value.loundness) * args.normRatio
+      else return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio
    });
 
    nrTotal = ln.length;
@@ -265,7 +268,7 @@ async function normMode(){
    await normalizeFiles(args.input, ln);
 
    console.log(
-      `\n${ncc('green')}Normalization Compleated${ncc()}\n------------------------------------------\n${ncc()}Nomalized: ${ncc('cyan')+nrTotal+ncc()}\nSkiped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.tagetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
+      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.tagetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
    );
 }
 
@@ -277,9 +280,9 @@ async function normMode(){
  * and return necessary data to normalize them
  * @param {boolean} fillter whether to fillter only the one needs Normalization
  */
-async function scanFilesLoundness(folder, fileNames, fillter = false){
+async function scanFilesloudness(folder, fileNames, fillter = false){
    console.log(`Scanning...`);
-   console.time('\nScaning took');
+   console.time('\nScanning took');
    operation = 'scan';
    let outOfBounds = [];
    for(let i = 0; i < fileNames.length;){
@@ -289,27 +292,27 @@ async function scanFilesLoundness(folder, fileNames, fillter = false){
       for( ; y < args.scanThread; y++){
          if(!(fileNames[i + y])) break;
          if(!outputIsFile)
-            proms.push(getLoundness(folder  + '/' + fileNames[i + y]));
-         else proms.push(getLoundness(folder));
+            proms.push(getloudness(folder  + '/' + fileNames[i + y]));
+         else proms.push(getloudness(folder));
          res.push({
-            loundness:null,
+            loudness:null,
             name: fileNames[i + y],
             normalize: null
          });
       }
       i += y;
 
-      const loundnessRes = (await Promise.all(proms));
-      res.map((v, i) => v.loundness = loundnessRes[i]);
+      const loudnessRes = (await Promise.all(proms));
+      res.map((v, i) => v.loudness = loudnessRes[i]);
       // eventEmitter.emit('scanloop', y);
-      outOfBounds = outOfBounds.concat(res.filter(v => v.loundness));
+      outOfBounds = outOfBounds.concat(res.filter(v => v.loudness));
    }
 
-   console.timeEnd('\nScaning took');
+   console.timeEnd('\nScanning took');
    if(!fillter) return outOfBounds;
 
    return outOfBounds.filter(v =>
-      proximate(v.loundness, args.tagetLUFS, args.LUFSMaxOffset) != args.tagetLUFS
+      proximate(v.loudness, args.tagetLUFS, args.LUFSMaxOffset) != args.tagetLUFS
    );
 }
 
@@ -342,9 +345,10 @@ async function normalizeFiles(folder, filesObj){
 }
 
 
-function getLoundness(filePath){
+function getloudness(filePath){
    return new Promise((resolve, reject) => {
-      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | awk '/I:/{print $2}'`, (err, stdout, stderr) => {
+      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | wk '/I:/{print $2}'`, (err, stdout, stderr) => {
+         if(err||stderr) console.error(err, stderr);
          eventEmitter.emit('scanloop', 1);
          resolve(parseFloat(stdout));
       });
@@ -371,7 +375,7 @@ function applyGain(inputFolder, outputFolder, fileName, dB){
          exec(
             `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} -af "volume=${dB.toFixed(3)}dB" -c:v copy "${outputFolder}"`,
             (err, stdout, stderr) => {
-               if(err) console.error(err);
+               if(err||stderr) console.error(err, stderr);
                eventEmitter.emit('norm', 1);
                resolve();
             }
@@ -380,7 +384,7 @@ function applyGain(inputFolder, outputFolder, fileName, dB){
          exec(
             `ffmpeg -hide_banner -y -i "${inputFolder}/${fileName}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} -af "volume=${dB.toFixed(3)}dB" -c:v copy  "${outputFolder}/${fileName}"`,
             (err, stdout, stderr) => {
-               if(err) console.error(err);
+               if(err||stderr) console.error(err, stderr);
                eventEmitter.emit('norm', 1);
                resolve();
             }
