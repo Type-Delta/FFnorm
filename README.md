@@ -5,7 +5,7 @@ powered by **FFmpeg**
 for normalizing large batch of files.
 
 
-## Installation
+## Installations
 
 Required dependencies are **FFmpeg**, **AWK** and **Node.js** (if using Executables, Node.js is **unnecessary**).
 didn't have them?
@@ -30,7 +30,7 @@ input path can be File or Folder
 ```
 ffnorm scan -i "path/to/input/folder"
 ```
-you can also spacifiy **Target** loudness as guide line
+you can also specifiy **Target** loudness as guideline
 ```
 ffnorm scan -i "path/to/input/folder" --target -9
 ```
