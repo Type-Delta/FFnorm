@@ -9,7 +9,7 @@
 
 const Tools = {
    /**format JSON string to make it more human-readable
-    * ***Waring:* in the current version this function will remove any White-Space in the string which can cause MASSIVE INFOMATION LOSS!!**
+    * ***Waring:* in the current version this function will remove any White-Space in the string which can cause MASSIVE INFORMATION LOSS!!**
     * @param {string}JsonString
     * @returns {string} the beautified JSON string
     */
@@ -59,23 +59,23 @@ const Tools = {
          //add \n
          // console.log(reading, nextNearest);
          let isolated = JsonString.substring(reading, nextNearest);
-         let quoteIdexs = Tools.getMatchAllIndexs(isolated.matchAll("\""))
+         let quoteIndex = Tools.getMatchAllIndexs(isolated.matchAll("\""))
             .filter(i => i != 0? isolated[i - 1] != "\\": true); //remove index of " that has \ as prefix
-         if((quoteIdexs.length % 2) != 0)
+         if((quoteIndex.length % 2) != 0)
             throw new Error("cannot match Double-Quote correctly from String: \"" + isolated + '\"');
 
          let needNewLine = Tools.getMatchAllIndexs(isolated.matchAll(/[,]/g))
             .filter(i => {
-               // remove commas thats were inside any of ""
-               for (let l = 0; l < quoteIdexs.length; l += 2)
-                  if (i > quoteIdexs[l] && i < quoteIdexs[l + 1]) return false;
+               // remove commas that were inside any of ""
+               for (let l = 0; l < quoteIndex.length; l += 2)
+                  if (i > quoteIndex[l] && i < quoteIndex[l + 1]) return false;
                return true;
             });
          // const needSpace = Tools.getMatchAllIndexs(isolated.matchAll(/[:]/g))
          //    .filter(i => {
-         //       // remove commas thats were inside any of ""
-         //       for (let l = 0; l < quoteIdexs.length; l += 2)
-         //          if (i > quoteIdexs[l] && i < quoteIdexs[l + 1]) return false;
+         //       // remove commas that were inside any of ""
+         //       for (let l = 0; l < quoteIndex.length; l += 2)
+         //          if (i > quoteIndex[l] && i < quoteIndex[l + 1]) return false;
          //       return true;
          //    });
 
@@ -109,14 +109,14 @@ const Tools = {
       }
 
       function findNearestBrack(brackets, reading) {
-         let shotestGap = Infinity;
+         let shortestGap = Infinity;
          let nearestIndex;
          for (let i = 0, n = brackets[i]; i < brackets.length; n = brackets[++i]) {
             const gap = n - reading;
             if (!gap) return i;
             if (gap < 0) continue;
-            if (gap < shotestGap) {
-               shotestGap = gap;
+            if (gap < shortestGap) {
+               shortestGap = gap;
                nearestIndex = i;
             }
          }
@@ -195,8 +195,8 @@ const Tools = {
 
    /**return digit in the given index as Number
     * (index can be negative)
-    * @param {Number}index digit index of the interest Number
-    * @param {Number}number Number to pick a digit from
+    * @param {number}index digit index of the interest Number
+    * @param {number}number Number to pick a digit from
     * @returns [Number] digit at given index
     */
    digitAt: function(index, number){
@@ -210,15 +210,15 @@ const Tools = {
 
 
    /**return digits in the given range as Number
-    * @param {Number}start digit start range of the interest Number
-    * @param {Number}start digit end range of the interest Number
-    * @param {Number}number Number to pick a digit from
+    * @param {number}start digit start range of the interest Number
+    * @param {number}start digit end range of the interest Number
+    * @param {number}number Number to pick a digit from
     * @returns [Number] digit at given range
     */
    digitAtRange: function(start, end, number){
       if(!number) return;
 
-      // if start is negative or falsty when start != 0; start = undefined;
+      // if start is negative or falsy when start != 0; start = undefined;
       start = (start < 0?undefined:start??undefined);
       end = (end < 0?undefined:end??undefined);
 
@@ -230,7 +230,7 @@ const Tools = {
 
 
 
-   /**just like `.length` but exclude some spacial control char
+   /**just like `.length` but exclude some special control char
     * given the more accurate results
     */
    ex_length(string){
@@ -261,10 +261,10 @@ const Tools = {
 
 
 
-   /**genarate random int at a specified range;
-    * use build-in function `Math.random()` to genarate random numbers
-    * @param {Number}min
-    * @param {Number}max
+   /**generate random int at a specified range;
+    * use build-in function `Math.random()` to generate random numbers
+    * @param {number}min
+    * @param {number}max
     */
    getRandomInt: function(min, max) {
       return Math.round(Math.random() * (max - min) + min);
@@ -272,19 +272,19 @@ const Tools = {
 
 
 
-   /**Genarate an unique id base on ID-pallet
-    * @param {Array}alreadyExistIDs Array of IDs that already existed to not genarate a duplicated
-    * @param {String}pallet the structure of ID, the length of it would be the same for genarated ID.
+   /**Generate a unique id base on ID-pallet
+    * @param {Array}alreadyExistedIDs Array of IDs that already existed to not generate a duplicated
+    * @param {String}pallet the structure of ID, the length of it would be the same for generated ID.
     * @example Control characters are:
     *    `C` a random en Character (a-z, A-Z)
     *    `N` a random single Number
     *    `B` a random of BOTH Character and Number
     *
-    * // to create an unique ID with 2 Numbers in the front followed by `-` and 3 Characters in the back
+    * // to create a unique ID with 2 Numbers in the front followed by `-` and 3 Characters in the back
     * const oldIDs = ['aSer2234', '4467j', '39_mIq'];
     * const newUniqueID = IDGenerator(oldIDs, 'NN-CCC');
     */
-   IDGenerator: function(alreadyExistIDs = undefined, pallet = 'CCNNNN'){
+   IDGenerator: function(alreadyExistedIDs = undefined, pallet = 'CCNNNN'){
       let foundDub = false;
 
       while(true){
@@ -316,8 +316,8 @@ const Tools = {
          }
 
 
-         if(alreadyExistIDs){
-            for(const existedID of alreadyExistIDs){
+         if(alreadyExistedIDs){
+            for(const existedID of alreadyExistedIDs){
                if(existedID == id){
                   foundDub = true;
                   break;
@@ -407,7 +407,7 @@ const Tools = {
     */
    fixFilePath(path, replaceStr = '_'){
       if(!path||!path?.length)
-         throw 'path is either falsty or empty!';
+         throw 'path is either falsy or empty!';
 
       const badChars = new RegExp('[:?"<>|*]', 'g');
       if(badChars.test(path))
@@ -424,7 +424,7 @@ const Tools = {
     */
    fixYTurl(url){
       url = url||undefined;
-      if(!url) throw 'url can\'t be falsty!!'
+      if(!url) throw 'url can\'t be falsy!!'
       if(url.includes("youtu.be")){
          url = url.replace(
             "https://youtu.be/",
@@ -623,21 +623,21 @@ const Tools = {
 
 
 
-   /**(**Node Console Color**) return the Node.js Conole Text fommats, use this formmat to change
+   /**(**Node Console Color**) return the Node.js Console Text formats, use this formmat to change
     * how Console Text looks.
-    * @param {String}Color color or fommat of choice (if omit: 'Reset', invlid: 'white')
+    * @param {String}Color color or format of choice (if omit: 'Reset', invlid: 'white')
     * @example
-    * fommat available: `Reset, Bright, Dim, Italic, Blink, Invert, Hidden`
+    * format available: `Reset, Bright, Dim, Italic, Blink, Invert, Hidden`
     * fontcolor: `Black, Red, Green, Yellow, Blue, Magenta, Cyan, White`
     * background color: `BgBlack, BgRed, BgGreen, BgYellow, BgBlue, BgMagenta, BgCyan, BgWhite`
     *
-    * @returns {String} the fommat code for changing node.js Conole Text fommats
+    * @returns {String} the format code for changing node.js Console Text formats
     * @example //Usage...
     * const fmRed = ncc('Red');
     * const resetFm = ncc('Reset');
     * const textToLog = 'I\'m Red boi!!!';
     *
-    * //use Reset fommat to made sure only `textToLog` are effected
+    * //use Reset format to made sure only `textToLog` are effected
     * console.log(`${fmRed}%s${resetFm}`, textToLog);
     *
     * //Log red "I'm Red boi!!!" text on the Terminal
@@ -764,13 +764,13 @@ const Tools = {
     * @param {Number}num the target Number
     */
    nearestNumber: function(arr, num){
-      let shotestGap = Infinity;
+      let shortestGap = Infinity;
       let nearestIndex = null;
       for(let i = 0, n = arr[i]; i < arr.length; ){
          const gap = Math.abs(num - n);
          if(!gap) return i;
-         if(gap < shotestGap){
-            shotestGap = gap;
+         if(gap < shortestGap){
+            shortestGap = gap;
             nearestIndex = i;
          }
          n = arr[++i]
@@ -804,7 +804,7 @@ const Tools = {
     * @example
     * let myParams = {
          name: {
-            pattern: ['--name', '-n'], // <- requied
+            pattern: ['--name', '-n'], // <- required
             default: 'Timmy',
             type: 'string', // <- default to 'string' unless `isFlag` is true
             isFlag: false,
@@ -816,7 +816,7 @@ const Tools = {
          },
          hasCar: {
             pattern: ['--hascar', '--car'],
-            isFlag: true // <- requied (only for Flags that doesn't need any Value)
+            isFlag: true // <- required (only for Flags that doesn't need any Value)
          },
          gender: {
             pattern: ['-g'],
@@ -834,14 +834,14 @@ const Tools = {
     */
    parseArgs(args, template, caseSensitive = false){
       let parsed = {};
-      let requiedList = new Set();
+      let requiredList = new Set();
       for(const pName in template){
          if(template[pName]?.isFlag){
             parsed[pName] = false;
             continue;
          }
          if(template[pName]?.required)
-            requiedList.add(pName);
+            requiredList.add(pName);
          parsed[pName] = (template[pName]?.default?template[pName]?.default:null);
       }
 
@@ -851,7 +851,7 @@ const Tools = {
                throw new Error('invalid template: Object structure missmatched. every entries requires `pattern` property');
 
             if (!isKeyMatched(args[i], template[pName].pattern)) continue;
-            requiedList.delete(pName);
+            requiredList.delete(pName);
 
             // Value Checking and Parsing
             if (template[pName]?.isFlag) {
@@ -901,9 +901,9 @@ const Tools = {
             }
          }
       }
-
-      if(requiedList.size > 0)
-         throw new Error(`argument(s) '${[...requiedList]}' is required.`);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      if(requiredList.size > 0)
+         throw new Error(`argument(s) '${[...requiredList]}' is required.`);
 
       return parsed;
 
@@ -1018,7 +1018,7 @@ const Tools = {
          }
 
          if(eachPair[0].search(/[0-9]/) == 0)
-            throw new Error(`Tools.parseConfig(): Key can not starts with Numbers. at \`${eachRow}\``);
+            throw new Error(`Tools.parseConfig(): Key cannot starts with Numbers. at \`${eachRow}\``);
 
          {
             const invalidChar = eachPair[0].replace(/[a-z$_0-9]/ig, '');
@@ -1089,10 +1089,10 @@ const Tools = {
     * **return** `originValue` if delta of `X` to `originValue` is smaller than
     * `maxOffset` otherwise return `X`
     *
-    * @param {Number}X
-    * @param {Number}originValue
-    * @param {Number}maxOffset
-    * @returns snaped value
+    * @param {number}X
+    * @param {number}originValue
+    * @param {number}maxOffset
+    * @returns snapped value
     */
    proximate: function(X, originValue, maxOffset){
       if(X < (originValue + maxOffset)&&X > (originValue - maxOffset)){
@@ -1106,7 +1106,7 @@ const Tools = {
    /**
     * *" I have a `Reg(Exp)`, I have an `indexOf`... Ahhh `redexOf`"* ...any further explanation needed?
     *  redexOf is an indexOf but with `RegExp` supported
-    * @param {String}string string to search from (can be omitt if use as exstension)
+    * @param {String}string string to search from (can be omitted if use as extension)
     * @param {String|RegExp}searcher The Keyword, string or RegExp to search for
     * @param {Number}position The index at which to begin searching the String object. If omitted, search starts at the beginning of the string. Also, if **Negative** value is use will search string from the back, similar to **`string.lastIndexOf()`** but position is **Negative Index**
     * @returns {Number} position of the string that match the searcher, if none, `-1` would return
@@ -1153,7 +1153,7 @@ const Tools = {
 
 
    /**use for infinity-loops to prevent the loop from
-    * unintentionaly run forever
+    * unintentionally run forever
     * @param {Number}limit max loop iteration, default to 10*(10^9) (10 Billion)
     * @example
     * const st = new SafeTrue();
@@ -1287,7 +1287,7 @@ const Tools = {
 
 
 
-   /**pause the synchronous tread for the given duration
+   /**pause the synchronous thread for the given duration
     * @param {Number}milliseconds how long to pause in milliseconds
     */
    sleep: function(milliseconds) {
@@ -1311,7 +1311,7 @@ const Tools = {
     * allowing `'stdin'`, `'stdout'` and `'stder'` to show
     * on parent Terminal while also pipe output and error to
     * `stdout` and `stderr`.
-    * ***Note:*** please node that this is not a full replacement for 'inherit'
+    * ***Note:*** please note that this is not a full replacement for 'inherit'
     * the child process can and will detect if stdout is a pity and change output based on it
     * the terminal context is lost & ansi information (coloring) etc will be lost
     * @example
@@ -1328,7 +1328,7 @@ const Tools = {
     */
    SpawnMirror: class {
       /**setting for `'stdio'` property in `SpawnOptionsWithoutStdio`
-       * this setting is **requied** for `createMirror()` to work.
+       * this setting is **required** for `createMirror()` to work.
        * @example
        * const child = spawn('ls', ['-al'], {
             stdio: SpawnMirror.STDIO_MIRROR
@@ -1362,7 +1362,7 @@ const Tools = {
 
 
 
-   /**Splice but with String, **Note That: Unlike Array.splice() this method dosn't Overwrite
+   /**Splice but with String, **Note That: Unlike Array.splice() this method doesn't Overwrite
     * the original var**
     * @param {string}str
     * @param {number}index
