@@ -7,7 +7,7 @@
  * - getting audio loudness
  * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}""`
  * - modifying audio Gains
- * > ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=GAINdB" -id3v2_version 3 -c:v copy ouput.wav
+ * > ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=GAINdB" -id3v2_version 3 -c:v copy output.wav
  *
  * @author TypeDelta
 **/
@@ -26,7 +26,7 @@ const {
 
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
-   tagetLUFS: {
+   targetLUFS: {
       pattern: ['-t', '--target'],
       default: -14.4,
       type: 'float'
@@ -91,7 +91,7 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    (default to -14.4LUFS, YouTube standard loudness)
 
    ${ncc('bgWhite')+ncc('black')}  '-of', '--offset'  ${ncc()}
-   Max offset fron Target loudness before normalization become active.
+   Max offset from Target loudness before normalization become active.
    (default to 1.3LUFS)
 
    ${ncc('bgWhite')+ncc('black')}  '-r', '--ratio'  ${ncc()}
@@ -192,7 +192,7 @@ async function scanMode(){
 
    console.log(`\n${ncc('green')}Scan Completed${ncc()}\n------------------------------------------------------------------------------------------------------------------------------------------\n${ncc('magenta')}No.\t `+`Name`.padEnd(100, ' ') + `loudness\tDelta`);
    for(let i = 0; i < ln.length; i++){
-      const delta = Math.abs(ln[i].loudness - args.tagetLUFS);
+      const delta = Math.abs(ln[i].loudness - args.targetLUFS);
       let color;
       switch(nearestNumber([args.LUFSMaxOffset, args.LUFSMaxOffset + 3, args.LUFSMaxOffset + 6], delta)){
          case 0:
@@ -206,7 +206,7 @@ async function scanMode(){
             break;
       }
       console.log(
-         `${ncc()}${i + 1}.\t` + `${ln[i].name}`.padEnd(100, ' ') + `${color}${ln[i].loudness}LUFS\t${(ln[i].loudness - args.tagetLUFS).toFixed(1)}LUFS`
+         `${ncc()}${i + 1}.\t` + `${ln[i].name}`.padEnd(100, ' ') + `${color}${ln[i].loudness}LUFS\t${(ln[i].loudness - args.targetLUFS).toFixed(1)}LUFS`
       );
    }
 
@@ -248,7 +248,7 @@ async function normMode(){
 
    const ln = await scanFilesloudness(args.input, fileNames, true);
 
-   /**check for file with litle to no loudness
+   /**check for file with little to no loudness
     * since just normalizing won't do much anyways
     * (threshold < -30LUFS)
     */
@@ -258,7 +258,7 @@ async function normMode(){
          filesWithNosound.push(value);
          return value;
       }
-      else return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio
+      else return value.normalize = (args.targetLUFS - value.loudness) * args.normRatio
    });
 
    nrTotal = ln.length;
@@ -268,7 +268,7 @@ async function normMode(){
    await normalizeFiles(args.input, ln);
 
    console.log(
-      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.tagetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
+      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.targetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
    );
 }
 
@@ -312,7 +312,7 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
    if(!fillter) return outOfBounds;
 
    return outOfBounds.filter(v =>
-      proximate(v.loudness, args.tagetLUFS, args.LUFSMaxOffset) != args.tagetLUFS
+      proximate(v.loudness, args.targetLUFS, args.LUFSMaxOffset) != args.targetLUFS
    );
 }
 
@@ -414,7 +414,7 @@ function print(batchCount){
    switch(operation){
       case 'scan':
          process.stdout.write(
-            `Files scaned: ${operatedCount}/${scTotal} files [SPD: ${!calculationSpd.spd?'-':calculationSpd.spd.toFixed(1)}f/s]`
+            `Files scanned: ${operatedCount}/${scTotal} files [SPD: ${!calculationSpd.spd?'-':calculationSpd.spd.toFixed(1)}f/s]`
          );
          break;
       case 'normalize':
