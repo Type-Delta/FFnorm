@@ -5,9 +5,9 @@
  *
  * FFmpeg Commands use:
  * - getting audio loudness
- * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk '/I:/{print $2}'`
+ * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}""`
  * - modifying audio Gains
- * > `ffmpeg -hide_banner -y -i input.wav -af "volume=GAINdB" ouput.wav`
+ * > ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=GAINdB" -id3v2_version 3 -c:v copy ouput.wav
  *
  * @author TypeDelta
 **/
@@ -21,7 +21,8 @@ const {
    fileTypeOf,
    parseArgs,
    ncc,
-   nearestNumber
+   nearestNumber,
+   strClamp
 } = require('./Tools');
 
 const eventEmitter = new EventEmitter();
@@ -68,6 +69,19 @@ const ParamTemplate = {
    }
 }
 
+
+class MediaInfo {
+   loudness = null;
+   name = null;
+   normalize = null;
+   bitrate = null;
+
+   constructor(name){
+      this.name = name;
+   }
+};
+const r_matchNum = new RegExp("[0-9]+\.[0-9]+|[0-9]+");
+const defaultBitrate = 260e3;
 const nodeArgs = process.argv.slice(2);
 if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    console.log(`${ncc('magenta')}Usage:
@@ -114,14 +128,21 @@ const args = parseArgs(nodeArgs, ParamTemplate);
 if(!args.output) args.output = nodeArgs.at(-1);
 
 let lastPrint = (new Date).getTime() - 251;
-const calculationSpd = {
+const stats = {
    spd: null,
    tracker: 0,
-   lastCheck: (new Date).getTime() - 1001
+   operatedCount: 0,
+   firstPrint: true,
+   lastCheck: (new Date).getTime() - 1001,
+   reset(){
+      this.spd = null;
+      this.tracker = this.operatedCount = 0;
+      this.firstPrint = true;
+   }
 }
 let operation = null;
-let operatedCount = 0, scTotal, nrTotal;
-let firstPrint = true, outputIsFile = false;
+let scTotal, nrTotal;
+let outputIsFile = false;
 
 /**a realy weak type checking but it
  * should be fine for this application?
@@ -129,7 +150,6 @@ let firstPrint = true, outputIsFile = false;
 const isSupportedFile = (n) => {
    return fileTypeOf(n) == 'media'
 }
-
 
 
 
@@ -177,7 +197,7 @@ if(args.mode_scan){
 
 async function scanMode(){
    eventEmitter.on('scanloop', batchCount => {
-      operatedCount += batchCount;
+      stats.operatedCount += batchCount;
       print(batchCount);
    });
 
@@ -188,13 +208,24 @@ async function scanMode(){
    ).filter(n => isSupportedFile(n)));
    scTotal = fileNames.length;
 
-   const ln = await scanFilesloudness(args.input, fileNames);
+   let fileInfo = await scanFilesloudness(args.input, fileNames);
 
-   console.log(`\n${ncc('green')}Scan Completed${ncc()}\n------------------------------------------------------------------------------------------------------------------------------------------\n${ncc('magenta')}No.\t `+`Name`.padEnd(100, ' ') + `loudness\tDelta`);
-   for(let i = 0; i < ln.length; i++){
-      const delta = Math.abs(ln[i].loudness - args.tagetLUFS);
+   nrTotal = fileInfo.length;
+   stats.reset();
+   fileInfo = await scanFilesBitrate(args.input, fileInfo);
+
+   const nameDispSize = process.stdout.columns >> 1;
+   console.log(
+      `\n${ncc('green')}Scan Completed${ncc()}\n${''.padEnd(nameDispSize + 37, '-')}\n${ncc('magenta')}No.\t`+`Name`.padEnd(nameDispSize, ' ') + `loudness   Delta      Bitrate`
+   );
+   for(let i = 0; i < fileInfo.length; i++){
+      const delta = fileInfo[i].loudness - args.tagetLUFS;
       let color;
-      switch(nearestNumber([args.LUFSMaxOffset, args.LUFSMaxOffset + 3, args.LUFSMaxOffset + 6], delta)){
+      switch(
+            nearestNumber(
+               [args.LUFSMaxOffset, args.LUFSMaxOffset + 3, args.LUFSMaxOffset + 6], Math.abs(delta)
+            )
+         ){
          case 0:
             color = ncc('green');
             break;
@@ -206,7 +237,7 @@ async function scanMode(){
             break;
       }
       console.log(
-         `${ncc()}${i + 1}.\t` + `${ln[i].name}`.padEnd(100, ' ') + `${color}${ln[i].loudness}LUFS\t${(ln[i].loudness - args.tagetLUFS).toFixed(1)}LUFS`
+         `${ncc()}${i + 1}.\t` + strClamp(fileInfo[i].name, nameDispSize) + color + strClamp(`${fileInfo[i].loudness}LUFS`, 11, 'end') + strClamp(`${(delta).toFixed(1)}LUFS`, 11, 'end') +ncc('cyan')+ (fileInfo[i].bitrate??null?`${(fileInfo[i].bitrate / 1000).toFixed(0)}kbps`:`${ncc('red')}Unknown`)
       );
    }
 
@@ -230,11 +261,11 @@ async function normMode(){
 
 
    eventEmitter.on('scanloop', batchCount => {
-      operatedCount += batchCount;
+      stats.operatedCount += batchCount;
       print(batchCount);
    });
    eventEmitter.on('norm', batchCount => {
-      operatedCount += batchCount;
+      stats.operatedCount += batchCount;
       print(batchCount);
    });
 
@@ -246,26 +277,14 @@ async function normMode(){
    scTotal = fileNames.length;
 
 
-   const ln = await scanFilesloudness(args.input, fileNames, true);
+   let fileInfo = await scanFilesloudness(args.input, fileNames, true);
 
-   /**check for file with litle to no loudness
-    * since just normalizing won't do much anyways
-    * (threshold < -30LUFS)
-    */
-   let filesWithNosound = [];
-   ln.map(value => {
-      if(value.loudness < -30) {
-         filesWithNosound.push(value);
-         return value;
-      }
-      else return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio
-   });
+   nrTotal = fileInfo.length;
+   stats.reset();
+   fileInfo = await scanFilesBitrate(args.input, fileInfo);
 
-   nrTotal = ln.length;
-   firstPrint = true;
-   operatedCount = 0;
-   calculationSpd.tracker = 0;
-   await normalizeFiles(args.input, ln);
+   stats.reset();
+   await normalizeFiles(args.input, fileInfo);
 
    console.log(
       `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.tagetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
@@ -291,20 +310,19 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
       let y = 0;
       for( ; y < args.scanThread; y++){
          if(!(fileNames[i + y])) break;
+
          if(!outputIsFile)
-            proms.push(getloudness(folder  + '/' + fileNames[i + y]));
+            proms.push(getloudness(path.join(folder,  fileNames[i + y])));
          else proms.push(getloudness(folder));
-         res.push({
-            loudness:null,
-            name: fileNames[i + y],
-            normalize: null
-         });
+
+         res.push(
+            new MediaInfo(fileNames[i + y])
+         );
       }
       i += y;
 
-      const loudnessRes = (await Promise.all(proms));
+      const loudnessRes = await Promise.all(proms);
       res.map((v, i) => v.loudness = loudnessRes[i]);
-      // eventEmitter.emit('scanloop', y);
       outOfBounds = outOfBounds.concat(res.filter(v => v.loudness));
    }
 
@@ -318,20 +336,72 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
 
 
 
-async function normalizeFiles(folder, filesObj){
+/**scan Bitrate info and insert them to every MediaInfo
+ * @param {MediaInfo[]} fileObjArr
+ * @param {string} folder folder path
+ */
+async function scanFilesBitrate(folder, fileObjArr){
+   console.log(`Scanning Files Bitrate...`);
+   console.time('\nBitrate Scanning took');
+   operation = 'scan';
+
+   let bitrateRes = [];
+   for(let i = 0; i < fileObjArr.length;){
+      let proms = [];
+      let y = 0;
+      for( ; y < args.scanThread; y++){
+         if(!(fileObjArr[i + y])) break;
+
+         if(!outputIsFile)
+            proms.push(getAudioBitrate(path.join(folder, fileObjArr[i + y].name)));
+         else proms.push(getAudioBitrate(folder));
+      }
+      i += y;
+      const res = await Promise.all(proms);
+      bitrateRes = bitrateRes.concat(res);
+   }
+
+   fileObjArr.map((v, i) => v.bitrate = bitrateRes[i]);
+   console.timeEnd('\nBitrate Scanning took');
+   return fileObjArr;
+}
+
+
+
+
+/**normalize files in MediaInfo array
+ * @param {MediaInfo[]} fileObjArr
+ * @param {string} folder folder path
+ */
+async function normalizeFiles(folder, fileObjArr){
    console.log(`Normalizing...`);
    operation = 'normalize';
    console.time('\nNormalization took');
+
+   // calculate normalization data
+   fileObjArr.map(value => {
+      /**check for file with litle to no loudness
+       * since just normalizing won't do much anyways
+       * (threshold < -30LUFS)
+       */
+      if(value.loudness < -30) return value;
+      return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio
+   });
+
    let proms = [];
    let norms = 0;
-   for (let i = 0; i < filesObj.length; ) {
+   for (let i = 0; i < fileObjArr.length; ) {
       let y = 0; norms = 0;
       for (; y < args.normThread; y++) {
-         if (!(filesObj[i + y])) break;
-         if (filesObj[i + y].normalize == null) continue;
+         if (!(fileObjArr[i + y])) break;
+         if (fileObjArr[i + y].normalize == null) continue;
          proms.push(
             applyGain(
-               folder, args.output, filesObj[i + y].name, filesObj[i + y].normalize
+               folder,
+               args.output,
+               fileObjArr[i + y].name,
+               fileObjArr[i + y].normalize,
+               fileObjArr[i + y].bitrate? fileObjArr[i + y].bitrate: defaultBitrate
             )
          );
          norms++;
@@ -339,15 +409,28 @@ async function normalizeFiles(folder, filesObj){
       i += y;
 
       await Promise.all(proms);
-      // eventEmitter.emit('norm', norms);
    }
    console.timeEnd('\nNormalization took');
 }
 
 
+function getAudioBitrate(filePath){
+   return new Promise((resolve, reject) => {
+      exec(`ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1 "${filePath}"`, (err, stdout, stderr) => {
+         if(err||stderr) console.error(err, stderr);
+         eventEmitter.emit('scanloop', 1);
+         resolve(
+            parseInt(r_matchNum.exec(stdout)?.[0])
+         );
+      });
+   });
+}
+
+
+
 function getloudness(filePath){
    return new Promise((resolve, reject) => {
-      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | wk '/I:/{print $2}'`, (err, stdout, stderr) => {
+      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`, (err, stdout, stderr) => {
          if(err||stderr) console.error(err, stderr);
          eventEmitter.emit('scanloop', 1);
          resolve(parseFloat(stdout));
@@ -355,7 +438,7 @@ function getloudness(filePath){
    });
 }
 
-function applyGain(inputFolder, outputFolder, fileName, dB){
+function applyGain(inputFolder, outputFolder, fileName, dB, bitrate){
    return new Promise((resolve, reject) => {
       const ext = fileName.slice(fileName.lastIndexOf('.') + 1);
       const useID3v2 = (
@@ -373,18 +456,18 @@ function applyGain(inputFolder, outputFolder, fileName, dB){
 
       if(outputIsFile){
          exec(
-            `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} -af "volume=${dB.toFixed(3)}dB" -c:v copy "${outputFolder}"`,
+            `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} -af "volume=${dB.toFixed(3)}dB" -b:a ${bitrate} -c:v copy "${outputFolder}"`,
             (err, stdout, stderr) => {
-               if(err||stderr) console.error(err, stderr);
+               if(err) console.error(err, stderr);
                eventEmitter.emit('norm', 1);
                resolve();
             }
          )
       }else{
          exec(
-            `ffmpeg -hide_banner -y -i "${inputFolder}/${fileName}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} -af "volume=${dB.toFixed(3)}dB" -c:v copy  "${outputFolder}/${fileName}"`,
+            `ffmpeg -hide_banner -y -i "${path.join(inputFolder, fileName)}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} -af "volume=${dB.toFixed(3)}dB" -b:a ${bitrate} -c:v copy  "${path.join(outputFolder, fileName)}"`,
             (err, stdout, stderr) => {
-               if(err||stderr) console.error(err, stderr);
+               if(err) console.error(err, stderr);
                eventEmitter.emit('norm', 1);
                resolve();
             }
@@ -395,32 +478,33 @@ function applyGain(inputFolder, outputFolder, fileName, dB){
 
 
 function print(batchCount){
-   calculationSpd.tracker += batchCount
-   const lastCheckDelta = (new Date).getTime() - calculationSpd.lastCheck;
-   if (lastCheckDelta > 1000&&calculationSpd.tracker > 4){
-      calculationSpd.spd = (calculationSpd.tracker * 1000) / lastCheckDelta;
-      calculationSpd.tracker = 0;
-      calculationSpd.lastCheck = (new Date).getTime();
+   stats.tracker += batchCount
+   const lastCheckDelta = (new Date).getTime() - stats.lastCheck;
+   if (lastCheckDelta > 1000&&stats.tracker > 4){
+      stats.spd = (stats.tracker * 1000) / lastCheckDelta;
+      stats.tracker = 0;
+      stats.lastCheck = (new Date).getTime();
    }
    if (lastPrint + 50 > (new Date).getTime()) return;
 
    lastPrint = (new Date).getTime();
-   if(!firstPrint){
+   if(!stats.firstPrint){
       process.stdout.clearLine();
       process.stdout.cursorTo(0);
-   }else firstPrint = false;
+   }else stats.firstPrint = false;
 
 
    switch(operation){
       case 'scan':
          process.stdout.write(
-            `Files scaned: ${operatedCount}/${scTotal} files [SPD: ${!calculationSpd.spd?'-':calculationSpd.spd.toFixed(1)}f/s]`
+            `Files scanned: ${stats.operatedCount}/${scTotal} files [SPD: ${!stats.spd?'-':stats.spd.toFixed(1)}f/s]`
          );
          break;
       case 'normalize':
          process.stdout.write(
-            `Files normalized: ${operatedCount}/${nrTotal} files [SPD: ${!calculationSpd.spd?'-':calculationSpd.spd.toFixed(1)}f/s]`
+            `Files normalized: ${stats.operatedCount}/${nrTotal} files [SPD: ${!stats.spd?'-':stats.spd.toFixed(1)}f/s]`
          );
          break;
    }
 }
+
