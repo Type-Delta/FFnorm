@@ -1,6 +1,6 @@
 //////////// Tools ////////////
 /**tools for Javascript
- * @version 2.9.6
+ * @version 2.9.7
  */
 "use strict";
 
@@ -498,6 +498,7 @@ const Tools = {
          fileExt == 'mp3'||
          fileExt == 'mp4'||
          fileExt == 'mp4a'||
+         fileExt == 'm4a'||
          fileExt == 'mkv'||
          fileExt == 'mov'||
          fileExt == 'wav'||
@@ -1198,7 +1199,7 @@ const Tools = {
       query = query.trim().toLowerCase();
       if(query == '') return null;
       let strList = [...stringArr];
-      strList.forEach((e, i, arr) => arr[i] = e.toLowerCase());
+      strList.forEach((e, i, arr) => arr[i] = e.trim().toLowerCase());
 
 
       class Match{
@@ -1208,7 +1209,7 @@ const Tools = {
             this.matchIndex = matchIndex;
          }
       }
-      const seperator = new RegExp(/[ -_/\\;:()\[\],.'"!^*=+]/g);
+      const seperator = new RegExp(/[ -_・⧸/\\;:()\[\],.'"!^*=+「【】」]/g);
       let bestMatchs = [];
       const LPquery = query.replace(seperator, '');
       let qCharSet = new Set(LPquery); //remove duplicates
@@ -1218,12 +1219,13 @@ const Tools = {
 
       for(let i = 0; i < strList.length; i++){
          const lowProf = strList[i].replace(seperator, '');
+         // const sWords = strList[i].split(seperator);
          let LPSet = new Set(lowProf);
          const LPFreq = frequencyOf(lowProf, [...LPSet]);
          LPSet = [...LPSet];
 
          if(strList[i] == query||lowProf == query){
-            bestMatchs.unshift(new Match(query, query.length));
+            bestMatchs.unshift(new Match(strList[i], query.length * 3, i));
             continue;
          }
 
@@ -1232,11 +1234,14 @@ const Tools = {
 
          for(let i = 0; i < LPquery.length; i++){
             if(lowProf[i] == LPquery[i]) {
-               score += 1;
-               //console.log(lowProf[i], LPquery[i]);
+               score += .7;
             }
          }
 
+         // for(const w of sWords){
+         //    if(Tools.includesWord(w, LPquery))
+         //       score += 1;
+         // }
 
          for(let i = 0; i < qCharSet.length; i++){
             for(let j = 0; j < LPSet.length; j++){
@@ -1254,7 +1259,7 @@ const Tools = {
          bestMatchs.push(new Match(null, score, i));
       }
 
-
+      // descending sort
       bestMatchs.sort((a, b) => b.score - a.score);
       for(let i = 0; i < maxResult; i++){
          if(!bestMatchs[i]) break;
@@ -1358,7 +1363,28 @@ const Tools = {
    },
 
 
+   /**clamp string's length to the given length
+    * @param {string} str
+    * @param {number} length
+    * @param {string} dropLocation 'mid', 'start' or 'end' determine location in which the string would
+    * be dropped if the given str's length is smaller then `length`
+    */
+   strClamp(str, length, dropLocation = 'mid'){
+      if(str.length < length)
+         return str.padEnd(length, ' ');
 
+      // the length of str that won't be removed
+      const leftoverAmu = str.length - (str.length - length) - 3;
+      switch(dropLocation){
+         case 'mid':
+            const haft_loa = (leftoverAmu >> 1);
+            return str.slice(0, haft_loa) + "..." + str.slice(str.length - haft_loa);
+         case 'end':
+            return str.slice(0, leftoverAmu) + "...";
+         case 'start':
+            return "..." + str.slice(leftoverAmu);
+      }
+   },
 
 
 
