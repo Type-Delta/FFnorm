@@ -7,7 +7,8 @@ for normalizing large batch of files.
 
 ## Installations
 
-Required dependencies are **FFmpeg**, **AWK** and **Node.js** (if using Executables, Node.js is **unnecessary**).
+Required dependencies are **FFmpeg**, **FFprobe** (shiped with FFmpeg), **AWK** and **Node.js** (if using [Executables](https://github.com/Type-Delta/FFnorm/releases), Node.js is **unnecessary**).
+
 didn't have them?
 
 Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.org/en/download)
@@ -15,7 +16,7 @@ Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.
 for **AWK** see [installation guide](https://bobbyhadz.com/blog/install-awk-on-windows)
 
 ## Usage
-you can either run the Executable directly:
+you can either run the [Executable](https://github.com/Type-Delta/FFnorm/releases) directly:
 ```
 ffnorm norm -i "path/to/input/folder" "path/to/output/folder"
 ```
@@ -75,6 +76,7 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 > - mp3
 > - mp4
 > - mp4a
+> - m4a
 > - mkv
 > - mov
 > - wav
@@ -85,5 +87,7 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 #### FFmpeg Commands use:
 - getting audio loudness
 > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`
+- getting audio bitrate
+> `ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1  audio.wav"`
 - modifying audio Gains
-> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=GAINdB" -id3v2_version 3 -c:v copy ouput.wav`
+> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy ouput.wav`
