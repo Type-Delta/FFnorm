@@ -17,12 +17,12 @@ for **AWK** see [installation guide](https://bobbyhadz.com/blog/install-awk-on-w
 ## Usage
 you can either run the Executable directly:
 ```
-ffnorm norm -i "path/to/input/folder" "path/to/input/folder"
+ffnorm norm -i "path/to/input/folder" "path/to/output/folder"
 ```
 
 or run the source code var **Node.js**:
 ```
-node ffnorm.js norm -i "path/to/input/folder" "path/to/input/folder"
+node ffnorm.js norm -i "path/to/input/folder" "path/to/output/folder"
 ```
 
 #### Scan files Loudness
