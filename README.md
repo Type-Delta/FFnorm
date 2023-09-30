@@ -87,7 +87,7 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 - getting audio loudness
 > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`
 - modifying audio Gains
-> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -af "volume=GAINdB" -id3v2_version 3 -c:v copy ouput.wav`
+> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy ouput.wav`
+
 - gettting audio Bitrate
 > `ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1 audio.wav`
-> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy ouput.wav`
