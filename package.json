@@ -1,0 +1,33 @@
+{
+  "name": "ffnorm",
+  "version": "1.0.1a",
+  "description": "automatic audio Normalization tool powered by FFmpeg for normalizing large batch of files.",
+  "main": "ffnorm.js",
+  "bin": "ffnorm.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "pkg . -t latest-win-x64"
+  },
+  "pkg": {
+    "scripts": [
+      "Tools.js",
+      "ffnorm.js"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Type-Delta/FFnorm.git"
+  },
+  "keywords": [
+    "nodejs",
+    "ffmpeg"
+  ],
+  "author": "Type-Delta",
+  "license": "Unlicense license",
+  "bugs": {
+    "url": "https://github.com/Type-Delta/FFnorm/issues"
+  },
+  "homepage": "https://github.com/Type-Delta/FFnorm#readme"
+}

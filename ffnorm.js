@@ -28,6 +28,8 @@ const {
    strClamp
 } = require('./Tools');
 
+
+const VERSION = '1.0.1a';
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
    tagetLUFS: {
@@ -74,6 +76,10 @@ const ParamTemplate = {
    },
    output: {
       pattern: ['-o', '--output', '--out']
+   },
+   showVersion: {
+      pattern: ['-v', '--version'],
+      isFlag: true
    }
 }
 
@@ -128,7 +134,20 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    ${ncc('bgWhite')+ncc('black')}  '-nt', '--normthread'  ${ncc()}
    Max number of Threads for audio normalization
    (default to 32 threads)
+
+   ${ncc('bgWhite')+ncc('black')}  '-v', '--version'  ${ncc()}
+   prints program version and exit.
+
+   ${ncc('bgWhite')+ncc('black')}  '-h', '--help', 'help'  ${ncc()}
+   display this message.
 `);
+   return;
+}
+
+if(ParamTemplate.showVersion.pattern.includes(nodeArgs[0])){
+   console.log(
+      `${ncc('magenta')+ncc('Bright')}FFnorm\n${ncc()}Version: ${VERSION}\n\nfor usages: \`ffnorm -h\``
+   );
    return;
 }
 
