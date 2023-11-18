@@ -6,10 +6,10 @@
  * FFmpeg Commands use:
  * - getting audio loudness
  * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}""`
+ * - getting audio bitrate
+ * > `ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1  audio.wav"`
  * - modifying audio Gains
  * > `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy ouput.wav`
- * - gettting audio Bitrate
- * > `ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1 audio.wav`
  *
  *
  * @author TypeDelta
@@ -105,7 +105,7 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    specify input file/folder
 
    ${ncc('bgWhite')+ncc('black')}  '-o', '--output'  ${ncc()}
-   specify output file/folder
+   specify Output file/folder
    (if none set will use the last command-line argument as output)
 
    ${ncc('bgWhite')+ncc('black')}  'norm', '--norm', '-n'  ${ncc()}
@@ -204,18 +204,18 @@ if(args.mode_scan){
       console.log(`${ncc('yellow')}No Mode selected, default to ${ncc('magenta')}Normalize${ncc()}`);
 
    if(!args.output){
-      console.log(`${ncc('red')}output file/folder is required for this mode!${ncc()}`);
+      console.log(`${ncc('red')}Output file/folder is required for this mode!${ncc()}`);
       process.exit(1);
    }
 
    if(path.normalize(args.input) == path.normalize(args.output)){
-      console.log(`${ncc('red')}input folder can\'t be the same output!\nplease change output file/folder location.${ncc()}`);
+      console.log(`${ncc('red')}input folder can\'t be the same Output!\nplease change output file/folder location.${ncc()}`);
       process.exit(1);
    }
 
    if(fileTypeOf(args.output) == 'media'){
       if(fileTypeOf(args.input) != 'media'){
-         console.log(`${ncc('red')}input path must be a File if output path is a File${ncc()}`);
+         console.log(`${ncc('red')}input path must be a File if Output path is a File${ncc()}`);
          process.exit(1);
       }
       outputIsFile = true;
@@ -263,7 +263,7 @@ async function scanMode(){
       let color;
       switch(
             nearestNumber(
-               [args.LUFSMaxOffset, args.LUFSMaxOffset + 3, args.LUFSMaxOffset + 6], Math.abs(delta)
+               [args.LUFSMaxOffset, args.LUFSMaxOffset + 3, args.LUFSMaxOffset + 5], Math.abs(delta)
             )
          ){
          case 0:
@@ -289,7 +289,7 @@ async function scanMode(){
 async function normMode(){
    if(!outputIsFile){
       if(!args.output.endsWith('/')&&!args.output.endsWith('\\')){
-         console.log(ncc('red') + 'output folder must ends with \'/\' or \'\\\'' + ncc());
+         console.log(ncc('red') + 'Output folder must ends with \'/\' or \'\\\'' + ncc());
          process.exit(1);
       }
 
@@ -342,7 +342,7 @@ async function normMode(){
 
 /**scan a directory for media that exceeded the max loudness
  * and return necessary data to normalize them
- * @param {boolean} fillter whether to fillter only the one needs Normalization
+ * @param {boolean} fillter whether to fillter only the ones need Normalization
  */
 async function scanFilesloudness(folder, fileNames, fillter = false){
    console.log(`Scanning...`);
