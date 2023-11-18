@@ -29,5 +29,8 @@
   "bugs": {
     "url": "https://github.com/Type-Delta/FFnorm/issues"
   },
-  "homepage": "https://github.com/Type-Delta/FFnorm#readme"
+  "homepage": "https://github.com/Type-Delta/FFnorm#readme",
+  "dependencies": {
+    "node-id3": "^0.2.6"
+  }
 }
