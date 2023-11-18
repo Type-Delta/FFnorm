@@ -25,7 +25,9 @@ const {
    parseArgs,
    ncc,
    nearestNumber,
-   strClamp
+   strClamp,
+   propertiesCount,
+   sleep
 } = require('./Tools');
 
 
@@ -57,7 +59,7 @@ const ParamTemplate = {
    },
    scanThread: {
       pattern: ['-st', '--scanthread'],
-      default: 128,
+      default: 64,
       type: 'int'
    },
    normThread: {
@@ -116,37 +118,37 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
 
    ${ncc('bgWhite')+ncc('black')}  '-t', '--target'  ${ncc()}
    Target Loudness in LUFS
-   (default to -14.4LUFS, YouTube standard loudness)
+   (default to ${ParamTemplate.tagetLUFS.default}LUFS, YouTube standard loudness)
 
    ${ncc('bgWhite')+ncc('black')}  '-of', '--offset'  ${ncc()}
    Max offset fron Target loudness before normalization become active.
-   (default to 1.3LUFS)
+   (default to ${ParamTemplate.LUFSMaxOffset.default}LUFS)
 
    ${ncc('bgWhite')+ncc('black')}  '-r', '--ratio'  ${ncc()}
    How much Normalization is apply in percentage, 1.0 is 100%
    lower this value to prevent over-shooting
-   (default to 0.78)
+   (default to ${ParamTemplate.normRatio.default})
 
    ${ncc('bgWhite')+ncc('black')}  '-st', '--scanthread'  ${ncc()}
    Max number of Threads for loudness scanning
-   (default to 128 threads)
+   (default to ${ParamTemplate.scanThread.default} threads)
 
    ${ncc('bgWhite')+ncc('black')}  '-nt', '--normthread'  ${ncc()}
    Max number of Threads for audio normalization
-   (default to 32 threads)
+   (default to ${ParamTemplate.normThread.default} threads)
 
    ${ncc('bgWhite')+ncc('black')}  '-v', '--version'  ${ncc()}
    prints program version and exit.
 
    ${ncc('bgWhite')+ncc('black')}  '-h', '--help', 'help'  ${ncc()}
-   display this message.
+   display this message and exit.
 `);
    return;
 }
 
 if(ParamTemplate.showVersion.pattern.includes(nodeArgs[0])){
    console.log(
-      `${ncc('magenta')+ncc('Bright')}FFnorm\n${ncc()}Version: ${VERSION}\n\nfor usages: \`ffnorm -h\``
+      `${ncc('magenta')+ncc('Bright')}FFnorm\n${ncc()}Version: ${VERSION}\nfor usages: \`ffnorm -h\``
    );
    return;
 }
@@ -333,35 +335,56 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
    console.log(`Scanning...`);
    console.time('\nScanning took');
    operation = 'scan';
-   let outOfBounds = [];
+
+   let proms = [];
+   /**@type {MediaInfo[]} */
+   let filesLoudness = new Array(fileNames.length);
+   let activeThreads = 0;
+
    for(let i = 0; i < fileNames.length;){
-      let res = [];
-      let proms = [];
-      let y = 0;
-      for( ; y < args.scanThread; y++){
-         if(!(fileNames[i + y])) break;
+      while(activeThreads < args.scanThread){
+         if(!(fileNames[i])) break;
 
          if(!outputIsFile)
-            proms.push(getloudness(path.join(folder,  fileNames[i + y])));
-         else proms.push(getloudness(folder));
+            proms.push(getloudness(path.join(folder,  fileNames[i]), i));
+         else proms.push(getloudness(folder, i));
 
-         res.push(
-            new MediaInfo(fileNames[i + y])
-         );
+         proms.at(-1).then(([loudness, name, index]) => {
+            const info = new MediaInfo(name);
+            info.loudness = loudness;
+            filesLoudness[index] = info;
+            activeThreads--;
+         });
+         i++;
+         activeThreads++;
       }
-      i += y;
 
-      const loudnessRes = await Promise.all(proms);
-      res.map((v, i) => v.loudness = loudnessRes[i]);
-      outOfBounds = outOfBounds.concat(res.filter(v => v.loudness));
+      await waitThreads();
    }
 
-   console.timeEnd('\nScanning took');
-   if(!fillter) return outOfBounds;
+   await Promise.all(proms);
+   filesLoudness = filesLoudness.filter(v => v?.loudness);
 
-   return outOfBounds.filter(v =>
+   console.timeEnd('\nScanning took');
+   if(!fillter) return filesLoudness;
+
+   return filesLoudness.filter(v =>
       proximate(v.loudness, args.tagetLUFS, args.LUFSMaxOffset) != args.tagetLUFS
    );
+
+   /**wait for active thread to clear up
+    */
+   async function waitThreads(){
+      return new Promise((resolve, reject) => {
+         const checkFinishedTheads = () => {
+            eventEmitter.removeListener('scanloop', checkFinishedTheads);
+            sleep(100);
+            resolve();
+         };
+
+         eventEmitter.on('scanloop', checkFinishedTheads);
+      });
+   }
 }
 
 
@@ -419,29 +442,51 @@ async function normalizeFiles(folder, fileObjArr){
    });
 
    let proms = [];
-   let norms = 0;
-   for (let i = 0; i < fileObjArr.length; ) {
-      let y = 0; norms = 0;
-      for (; y < args.normThread; y++) {
-         if (!(fileObjArr[i + y])) break;
-         if (fileObjArr[i + y].normalize == null) continue;
+   let activeThreads = 0;
+
+   for(let i = 0; i < fileObjArr.length;){
+      while(activeThreads < args.normThread){
+         if(!(fileObjArr[i])) break;
+         if (fileObjArr[i].normalize == null) continue;
+
          proms.push(
             applyGain(
                folder,
                args.output,
-               fileObjArr[i + y].name,
-               fileObjArr[i + y].normalize,
-               fileObjArr[i + y].bitrate? fileObjArr[i + y].bitrate: defaultBitrate,
+               fileObjArr[i].name,
+               fileObjArr[i].normalize,
+               fileObjArr[i].bitrate? fileObjArr[i].bitrate: defaultBitrate,
                args.ffmpeg_qscale
             )
          );
-         norms++;
-      }
-      i += y;
 
-      await Promise.all(proms);
+         proms.at(-1).then(() => {
+            activeThreads--;
+         });
+         i++;
+         activeThreads++;
+      }
+
+      await waitThreads();
    }
+
+   await Promise.all(proms);
    console.timeEnd('\nNormalization took');
+
+
+   /**wait for active thread to clear up
+    */
+   async function waitThreads(){
+      return new Promise((resolve, reject) => {
+         const checkFinishedTheads = () => {
+            eventEmitter.removeListener('norm', checkFinishedTheads);
+            sleep(100);
+            resolve();
+         };
+
+         eventEmitter.on('norm', checkFinishedTheads);
+      });
+   }
 }
 
 
@@ -459,16 +504,20 @@ function getAudioBitrate(filePath){
 
 
 
-function getloudness(filePath){
+function getloudness(filePath, i){
    return new Promise((resolve, reject) => {
       exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`, (err, stdout, stderr) => {
          if(err||stderr) console.error(err, stderr);
          eventEmitter.emit('scanloop', 1);
-         resolve(parseFloat(stdout));
+         // resolve(parseFloat(stdout));
+         resolve([parseFloat(stdout), filePath.split(/[/\\]/g).at(-1), i]);
       });
    });
 }
 
+/**
+ * @returns {Promise<void>}
+ */
 function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1){
    return new Promise((resolve, reject) => {
       const ext = fileName.slice(fileName.lastIndexOf('.') + 1);
@@ -489,6 +538,21 @@ function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1
             `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy "${outputFolder}"`,
             (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
+               if(useID3v2&&!err){
+                  let retCount = 0;
+                  let ret = false;
+                  do{
+                     try{
+                        await NodeID3.update(tags, outputFolder);
+                        ret = false;
+                     }catch(err){
+                        if(err.code == 'EBUSY'){
+                           ret = true;
+                           sleep(1000);
+                        }
+                     }
+                  }while(ret&&++retCount < 3);
+               }
                eventEmitter.emit('norm', 1);
                resolve();
             }
@@ -498,6 +562,21 @@ function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1
             `ffmpeg -hide_banner -y -i "${path.join(inputFolder, fileName)}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy  "${path.join(outputFolder, fileName)}"`,
             (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
+               if(useID3v2&&!err){
+                  let retCount = 0;
+                  let ret = false;
+                  do{
+                     try{
+                        await NodeID3.update(tags, path.join(outputFolder, fileName));
+                        ret = false;
+                     }catch(err){
+                        if(err.code == 'EBUSY'){
+                           ret = true;
+                           sleep(1000);
+                        }
+                     }
+                  }while(ret&&++retCount < 3);
+               }
                eventEmitter.emit('norm', 1);
                resolve();
             }
@@ -515,7 +594,7 @@ function print(batchCount){
       stats.tracker = 0;
       stats.lastCheck = (new Date).getTime();
    }
-   if (lastPrint + 50 > (new Date).getTime()) return;
+   if (lastPrint + 500 > (new Date).getTime()) return;
 
    lastPrint = (new Date).getTime();
    if(!stats.firstPrint){
