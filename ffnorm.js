@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const { exec } = require('child_process');
+const NodeID3 = require('node-id3').Promise;
 const path = require('node:path');
 const EventEmitter = require('events');
 const {
@@ -25,11 +26,12 @@ const {
    parseArgs,
    ncc,
    nearestNumber,
-   strClamp
+   strClamp,
+   propertiesCount
 } = require('./Tools');
 
 
-const VERSION = '1.0.1a';
+const VERSION = '1.0.2';
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
    tagetLUFS: {
@@ -185,26 +187,37 @@ const isSupportedFile = (n) => {
 
 
 
-if(!fs.existsSync(args.input))
-      throw new Error('input path doesn\'t exist. typed something wrong?');
+if(!fs.existsSync(args.input)){
+   console.log(`${ncc('red')}input path doesn\'t exist. typed something wrong?${ncc()}`);
+   process.exit(1);
+}
 
 if(args.mode_scan){
    if(args.mode_norm)
       console.log(`${ncc('yellow')}Both Mode are selected, automatically choose ${ncc('magenta')}Scan${ncc()}`);
-   if(fileTypeOf(args.input) == 'media')
+   if(isSupportedFile(args.input))
       outputIsFile = true;
 
    scanMode();
 }else{
    if(!args.mode_norm)
       console.log(`${ncc('yellow')}No Mode selected, default to ${ncc('magenta')}Normalize${ncc()}`);
-   if(!args.output)
-      throw new Error('output file/folder is required for this mode!');
-   if(path.normalize(args.input) == path.normalize(args.output))
-      throw new Error('input folder can\'t be the same output!\nplease change Output file/folder location.');
+
+   if(!args.output){
+      console.log(`${ncc('red')}Output file/folder is required for this mode!${ncc()}`);
+      process.exit(1);
+   }
+
+   if(path.normalize(args.input) == path.normalize(args.output)){
+      console.log(`${ncc('red')}input folder can\'t be the same Output!\nplease change output file/folder location.${ncc()}`);
+      process.exit(1);
+   }
+
    if(fileTypeOf(args.output) == 'media'){
-      if(fileTypeOf(args.input) != 'media')
-         throw new Error('input path must be a File if Output path is a File');
+      if(fileTypeOf(args.input) != 'media'){
+         console.log(`${ncc('red')}input path must be a File if Output path is a File${ncc()}`);
+         process.exit(1);
+      }
       outputIsFile = true;
    }
 
@@ -275,15 +288,17 @@ async function scanMode(){
 
 async function normMode(){
    if(!outputIsFile){
-      // to prevent user from accidentally use use other args as Output folder
-      if(!args.output.endsWith('/')&&!args.output.endsWith('\\'))
-         throw new Error('Output folder must ends with \'/\' or \'\\\'');
+      if(!args.output.endsWith('/')&&!args.output.endsWith('\\')){
+         console.log(ncc('red') + 'Output folder must ends with \'/\' or \'\\\'' + ncc());
+         process.exit(1);
+      }
 
       try{
          if(!fs.existsSync(args.output))
             fs.mkdirSync(args.output, { recursive: true });
       }catch(err){
-         throw new Error(`Cannot create Output folder '${args.output}':\n${err}`);
+         console.log(`${ncc('red')}Cannot create folder ${args.output}:${ncc('dim')}\n${err}${ncc()}`);
+         process.exit(1);
       }
    }
 
@@ -415,7 +430,7 @@ async function normalizeFiles(folder, fileObjArr){
        * (threshold < -30LUFS)
        */
       if(value.loudness < -30) return value;
-      return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio
+      return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio;
    });
 
    let proms = [];
@@ -447,7 +462,7 @@ async function normalizeFiles(folder, fileObjArr){
 
 function getAudioBitrate(filePath){
    return new Promise((resolve, reject) => {
-      exec(`ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1 "${filePath}"`, (err, stdout, stderr) => {
+      exec(`ffprobe -v fatal -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1 "${filePath}"`, (err, stdout, stderr) => {
          if(err||stderr) console.error(err, stderr);
          eventEmitter.emit('scanloop', 1);
          resolve(
@@ -470,40 +485,37 @@ function getloudness(filePath){
 }
 
 function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1){
-   return new Promise((resolve, reject) => {
-      const ext = fileName.slice(fileName.lastIndexOf('.') + 1);
-      const useID3v2 = (
-         ext == 'aiff'||
-         ext == 'aif'||
-         ext == 'aifc'||
-         ext == 'mp3'||
-         ext == 'mp4'||
-         ext == 'mp4a'||
-         ext == 'm4a'||
-         ext == 'mov'||
-         ext == 'webm'
-      );
+   return new Promise(async (resolve, reject) => {
+      const tags = await NodeID3.read(outputIsFile? inputFolder:path.join(inputFolder, fileName));
+      const useID3v2 = propertiesCount(tags) > 1;
 
       if(outputIsFile){
          exec(
             `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy "${outputFolder}"`,
-            (err, stdout, stderr) => {
+            async (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
+               if(useID3v2&&!err){
+                  await NodeID3.update(tags, outputFolder);
+               }
                eventEmitter.emit('norm', 1);
                resolve();
             }
-         )
+         );
+
       }else{
          exec(
             `ffmpeg -hide_banner -y -i "${path.join(inputFolder, fileName)}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy  "${path.join(outputFolder, fileName)}"`,
-            (err, stdout, stderr) => {
+            async (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
+               if(useID3v2&&!err){
+                  await NodeID3.update(tags, path.join(outputFolder, fileName));
+               }
                eventEmitter.emit('norm', 1);
                resolve();
             }
-         )
+         );
       }
-   })
+   });
 }
 
 
