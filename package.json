@@ -8,7 +8,7 @@
     "test": "test"
   },
   "scripts": {
-    "build": "pkg . -t latest-win-x64 && echo Excutable Hash: && Get-FileHash ffnorm.exe"
+    "build": "powershell \"& pkg . -t latest-win-x64; echo ExcutableHash:; Get-FileHash ffnorm.exe\""
   },
   "pkg": {
     "scripts": [

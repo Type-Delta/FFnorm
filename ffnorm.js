@@ -28,11 +28,12 @@ const {
    nearestNumber,
    strClamp,
    propertiesCount,
-   sleep
+   sleep,
+   SafeTrue
 } = require('./Tools');
 
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
    tagetLUFS: {
@@ -47,7 +48,7 @@ const ParamTemplate = {
    },
    ffmpeg_qscale: {
       pattern: ['-q', '--qscale', '-qscale'], // single dash for somone who came from FFmpeg
-      default: 2,
+      default: 1,
       type: 'int'
    },
    mode_norm: {
@@ -75,13 +76,12 @@ const ParamTemplate = {
    },
    input: {
       pattern: ['-i', '--input'],
-      required: true
    },
    output: {
       pattern: ['-o', '--output', '--out']
    },
    showVersion: {
-      pattern: ['-v', '--version'],
+      pattern: ['-v', '--version', 'version'],
       isFlag: true
    }
 }
@@ -101,7 +101,10 @@ const r_matchNum = new RegExp("[0-9]+\.[0-9]+|[0-9]+");
 const defaultBitrate = 260e3;
 const nodeArgs = process.argv.slice(2);
 if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
-   console.log(`${ncc('magenta')}Usage:
+   console.log(`${ncc('Bright')}FFnorm${ncc()}
+automatic audio Normalization tool
+powered by FFmpeg for normalizing large batch of files.\n
+${ncc('magenta')}Usage:
    ${ncc('bgWhite')+ncc('black')}  '-i', '--input'  ${ncc()}
    specify input file/folder
 
@@ -120,6 +123,10 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    ${ncc('bgWhite')+ncc('black')}  '-t', '--target'  ${ncc()}
    Target Loudness in LUFS
    (default to ${ParamTemplate.tagetLUFS.default}LUFS, YouTube standard loudness)
+
+   ${ncc('bgWhite')+ncc('black')}  '-q', '--qscale', '-qscale'  ${ncc()}
+   FFmpeg quality scale, the lower the higher quality, 0 for lossless
+   (default to ${ParamTemplate.ffmpeg_qscale.default})
 
    ${ncc('bgWhite')+ncc('black')}  '-of', '--offset'  ${ncc()}
    Max offset fron Target loudness before normalization become active.
@@ -147,15 +154,22 @@ if(!nodeArgs.length||['-h', 'help', '--help'].includes(nodeArgs[0])){
    return;
 }
 
-if(ParamTemplate.showVersion.pattern.includes(nodeArgs[0])){
+
+
+const args = parseArgs(nodeArgs, ParamTemplate);
+if(!args.output.value) args.output.value = nodeArgs.at(-1);
+
+
+if(args.showVersion.value){
    console.log(
-      `${ncc('magenta')+ncc('Bright')}FFnorm\n${ncc()}Version: ${VERSION}\nfor usages: \`ffnorm -h\``
+      `${ncc('Bright')}FFnorm${ncc()}
+automatic audio Normalization tool
+powered by FFmpeg for normalizing large batch of files.
+${ncc('Magenta')}Version: ${VERSION}${ncc()}
+for usages: \`ffnorm -h\``
    );
    return;
 }
-
-const args = parseArgs(nodeArgs, ParamTemplate);
-if(!args.output) args.output = nodeArgs.at(-1);
 
 let lastPrint = (new Date).getTime() - 251;
 const stats = {
@@ -186,36 +200,49 @@ const isSupportedFile = (n) => {
 
 
 
+if(!args.input.value){
+   console.log(`${ncc('red')}Input file/folder is required!${ncc()}`);
+   process.exit(1);
+}
 
-
-if(!fs.existsSync(args.input)){
+if(!fs.existsSync(args.input.value)){
    console.log(`${ncc('red')}input path doesn\'t exist. typed something wrong?${ncc()}`);
    process.exit(1);
 }
 
-if(args.mode_scan){
-   if(args.mode_norm)
+if(args.mode_scan.value){
+   if(args.mode_norm.value)
       console.log(`${ncc('yellow')}Both Mode are selected, automatically choose ${ncc('magenta')}Scan${ncc()}`);
-   if(isSupportedFile(args.input))
-      outputIsFile = true;
 
+   if(args._unmatched.length){
+      console.log(`${ncc('red')}Unknown argument: '${args._unmatched[0].value}' at index ${args._unmatched[0].index + ncc()}`);
+      process.exit(1);
+   }
+
+   outputIsFile = isSupportedFile(args.input.value);
    scanMode();
+
 }else{
-   if(!args.mode_norm)
+   if(!args.mode_norm.value)
       console.log(`${ncc('yellow')}No Mode selected, default to ${ncc('magenta')}Normalize${ncc()}`);
 
-   if(!args.output){
+   if(args._unmatched.length&&args._unmatched[0].index != nodeArgs.length - 1){
+      console.log(`${ncc('red')}Unknown argument: '${args._unmatched[0].value}' at index ${args._unmatched[0].index + ncc()}`);
+      process.exit(1);
+   }
+
+   if(!args.output.value){
       console.log(`${ncc('red')}Output file/folder is required for this mode!${ncc()}`);
       process.exit(1);
    }
 
-   if(path.normalize(args.input) == path.normalize(args.output)){
+   if(path.normalize(args.input.value) == path.normalize(args.output.value)){
       console.log(`${ncc('red')}input folder can\'t be the same Output!\nplease change output file/folder location.${ncc()}`);
       process.exit(1);
    }
 
-   if(fileTypeOf(args.output) == 'media'){
-      if(fileTypeOf(args.input) != 'media'){
+   if(fileTypeOf(args.output.value) == 'media'){
+      if(fileTypeOf(args.input.value) != 'media'){
          console.log(`${ncc('red')}input path must be a File if Output path is a File${ncc()}`);
          process.exit(1);
       }
@@ -243,21 +270,21 @@ async function scanMode(){
    });
 
    // filter only supported files
-   const fileNames = (outputIsFile? [path.basename(args.input)]: fs.readdirSync(
-      args.input,
+   const fileNames = (outputIsFile? [path.basename(args.input.value)]: fs.readdirSync(
+      args.input.value,
       { encoding: 'utf-8' }
    ).filter(n => isSupportedFile(n)));
    scTotal = fileNames.length;
 
-   let fileInfo = await scanFilesloudness(args.input, fileNames);
+   let fileInfo = await scanFilesloudness(args.input.value, fileNames);
 
    nrTotal = fileInfo.length;
    stats.reset();
-   fileInfo = await scanFilesBitrate(args.input, fileInfo);
-
+   fileInfo = await scanFilesBitrate(args.input.value, fileInfo);
+      console.log(fileInfo);
    const nameDispSize = process.stdout.columns >> 1;
    console.log(
-      `\n${ncc('green')}Scan Completed${ncc()}\n${''.padEnd(nameDispSize + 37, '-')}\n${ncc('magenta')}No.\t`+`Name`.padEnd(nameDispSize, ' ') + `loudness   Delta      Bitrate`
+      `\n${ncc('green')}Scan Completed${ncc()}\n${''.padEnd(nameDispSize + 38, '-')}\n${ncc('magenta')}No.\t`+`Name`.padEnd(nameDispSize + 1, ' ') + `loudness   Delta      Bitrate`
    );
    for(let i = 0; i < fileInfo.length; i++){
       const delta = fileInfo[i].loudness - args.tagetLUFS;
@@ -278,7 +305,7 @@ async function scanMode(){
             break;
       }
       console.log(
-         `${ncc()}${i + 1}.\t` + strClamp(fileInfo[i].name, nameDispSize) + color + strClamp(`${fileInfo[i].loudness}LUFS`, 11, 'end') + strClamp(`${(delta).toFixed(1)}LUFS`, 11, 'end') +ncc('cyan')+ (fileInfo[i].bitrate??null?`${(fileInfo[i].bitrate / 1000).toFixed(0)}kbps`:`${ncc('red')}Unknown`)
+         `${ncc()}${i + 1}.\t` + strClamp(fileInfo[i].name, nameDispSize) + ' ' + color + strClamp(`${fileInfo[i].loudness}LUFS`, 11, 'end') + strClamp(`${(delta).toFixed(1)}LUFS`, 11, 'end') +ncc('cyan')+ (fileInfo[i].bitrate??null?`${(fileInfo[i].bitrate / 1000).toFixed(0)}kbps`:`${ncc('red')}Unknown`)
       );
    }
 
@@ -289,14 +316,14 @@ async function scanMode(){
 
 async function normMode(){
    if(!outputIsFile){
-      if(!args.output.endsWith('/')&&!args.output.endsWith('\\')){
-         console.log(ncc('red') + 'Output folder must ends with \'/\' or \'\\\'' + ncc());
-         process.exit(1);
-      }
+      // if(!args.output.value.endsWith('/')&&!args.output.value.endsWith('\\')){
+      //    console.log(ncc('red') + 'Output folder must ends with \'/\' or \'\\\'' + ncc());
+      //    process.exit(1);
+      // }
 
       try{
-         if(!fs.existsSync(args.output))
-            fs.mkdirSync(args.output, { recursive: true });
+         if(!fs.existsSync(args.output.value))
+            fs.mkdirSync(args.output.value, { recursive: true });
       }catch(err){
          console.log(`${ncc('red')}Cannot create folder ${args.output}:${ncc('dim')}\n${err}${ncc()}`);
          process.exit(1);
@@ -314,23 +341,23 @@ async function normMode(){
    });
 
    // filter only supported files
-   const fileNames = (outputIsFile? [path.basename(args.input)]: fs.readdirSync(
-      args.input,
+   const fileNames = (outputIsFile? [path.basename(args.input.value)]: fs.readdirSync(
+      args.input.value,
       { encoding: 'utf-8' }
    ).filter(n => isSupportedFile(n)));
    scTotal = fileNames.length;
 
 
-   let fileInfo = await scanFilesloudness(args.input, fileNames, true);
+   let fileInfo = await scanFilesloudness(args.input.value, fileNames, true);
 
    nrTotal = fileInfo.length;
    if(args.ffmpeg_qscale == -1){
       stats.reset();
-      fileInfo = await scanFilesBitrate(args.input, fileInfo);
+      fileInfo = await scanFilesBitrate(args.input.value, fileInfo);
    }
 
    stats.reset();
-   await normalizeFiles(args.input, fileInfo);
+   await normalizeFiles(args.input.value, fileInfo);
 
    console.log(
       `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.tagetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
@@ -449,28 +476,32 @@ async function normalizeFiles(folder, fileObjArr){
    fileObjArr.map(value => {
       /**check for file with litle to no loudness
        * since just normalizing won't do much anyways
-       * (threshold < -30LUFS)
+       * (threshold < -50LUFS)
        */
-      if(value.loudness < -30) return value;
+      if(value.loudness < -50) return value;
       return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio;
    });
 
    let proms = [];
    let activeThreads = 0;
+   const st = new SafeTrue();
 
-   for(let i = 0; i < fileObjArr.length;){
-      while(activeThreads < args.normThread){
+   for(let i = 0; i < fileObjArr.length; ){
+      while(activeThreads < args.normThread&&st.True){
          if(!(fileObjArr[i])) break;
-         if (fileObjArr[i].normalize == null) continue;
+         if (fileObjArr[i].normalize == null){
+            i++;
+            continue;
+         }
 
          proms.push(
             applyGain(
                folder,
-               args.output,
+               args.output.value,
                fileObjArr[i].name,
                fileObjArr[i].normalize,
                fileObjArr[i].bitrate? fileObjArr[i].bitrate: defaultBitrate,
-               args.ffmpeg_qscale
+               args.ffmpeg_qscale.value
             )
          );
 
