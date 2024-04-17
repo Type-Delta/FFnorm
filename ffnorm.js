@@ -9,7 +9,7 @@
  * - getting audio bitrate
  * > `ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1  audio.wav"`
  * - modifying audio Gains
- * > `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy ouput.wav`
+ * > `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy output.wav`
  *
  *
  * @author TypeDelta
@@ -36,7 +36,7 @@ const {
 const VERSION = '1.0.3';
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
-   tagetLUFS: {
+   targetLUFS: {
       pattern: ['-t', '--target'],
       default: -14.4,
       type: 'float'
@@ -97,6 +97,7 @@ class MediaInfo {
       this.name = name;
    }
 };
+
 const r_matchNum = new RegExp("[0-9]+\.[0-9]+|[0-9]+");
 const defaultBitrate = 260e3;
 const nodeArgs = process.argv.slice(2);
@@ -122,7 +123,7 @@ ${ncc('magenta')}Usage:
 
    ${ncc('bgWhite')+ncc('black')}  '-t', '--target'  ${ncc()}
    Target Loudness in LUFS
-   (default to ${ParamTemplate.tagetLUFS.default}LUFS, YouTube standard loudness)
+   (default to ${ParamTemplate.targetLUFS.default}LUFS, YouTube standard loudness)
 
    ${ncc('bgWhite')+ncc('black')}  '-q', '--qscale', '-qscale'  ${ncc()}
    FFmpeg quality scale, the lower the higher quality, 0 for lossless
@@ -188,7 +189,7 @@ let operation = null;
 let scTotal, nrTotal;
 let outputIsFile = false;
 
-/**a realy weak type checking but it
+/**a ready weak type checking but it
  * should be fine for this application?
  * @param {string}n */
 const isSupportedFile = (n) => {
@@ -281,13 +282,13 @@ async function scanMode(){
    nrTotal = fileInfo.length;
    stats.reset();
    fileInfo = await scanFilesBitrate(args.input.value, fileInfo);
-      console.log(fileInfo);
+
    const nameDispSize = process.stdout.columns >> 1;
    console.log(
       `\n${ncc('green')}Scan Completed${ncc()}\n${''.padEnd(nameDispSize + 38, '-')}\n${ncc('magenta')}No.\t`+`Name`.padEnd(nameDispSize + 1, ' ') + `loudness   Delta      Bitrate`
    );
    for(let i = 0; i < fileInfo.length; i++){
-      const delta = fileInfo[i].loudness - args.tagetLUFS;
+      const delta = fileInfo[i].loudness - args.targetLUFS;
       let color;
       switch(
             nearestNumber(
@@ -316,16 +317,11 @@ async function scanMode(){
 
 async function normMode(){
    if(!outputIsFile){
-      // if(!args.output.value.endsWith('/')&&!args.output.value.endsWith('\\')){
-      //    console.log(ncc('red') + 'Output folder must ends with \'/\' or \'\\\'' + ncc());
-      //    process.exit(1);
-      // }
-
       try{
          if(!fs.existsSync(args.output.value))
             fs.mkdirSync(args.output.value, { recursive: true });
       }catch(err){
-         console.log(`${ncc('red')}Cannot create folder ${args.output}:${ncc('dim')}\n${err}${ncc()}`);
+         console.log(`${ncc('red')}Cannot create folder ${args.output}\n${ncc('dim')}${err}${ncc()}`);
          process.exit(1);
       }
    }
@@ -360,7 +356,7 @@ async function normMode(){
    await normalizeFiles(args.input.value, fileInfo);
 
    console.log(
-      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.tagetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
+      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.targetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
    );
 }
 
@@ -373,7 +369,7 @@ async function normMode(){
  * @param {boolean} fillter whether to fillter only the ones need Normalization
  */
 async function scanFilesloudness(folder, fileNames, fillter = false){
-   console.log(`Scanning...`);
+   console.log(`Scanning Loudness...`);
    console.time('\nScanning took');
    operation = 'scan';
 
@@ -410,7 +406,7 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
    if(!fillter) return filesLoudness;
 
    return filesLoudness.filter(v =>
-      proximate(v.loudness, args.tagetLUFS, args.LUFSMaxOffset) != args.tagetLUFS
+      proximate(v.loudness, args.targetLUFS, args.LUFSMaxOffset) != args.targetLUFS
    );
 
    /**wait for active thread to clear up
@@ -474,12 +470,12 @@ async function normalizeFiles(folder, fileObjArr){
 
    // calculate normalization data
    fileObjArr.map(value => {
-      /**check for file with litle to no loudness
+      /**check for file with little to no loudness
        * since just normalizing won't do much anyways
        * (threshold < -50LUFS)
        */
       if(value.loudness < -50) return value;
-      return value.normalize = (args.tagetLUFS - value.loudness) * args.normRatio;
+      return value.normalize = (args.targetLUFS - value.loudness) * args.normRatio;
    });
 
    let proms = [];

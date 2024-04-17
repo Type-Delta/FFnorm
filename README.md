@@ -7,7 +7,7 @@ for normalizing large batch of files.
 
 ## Installations
 
-Required dependencies are **FFmpeg**, **FFprobe** (shiped with FFmpeg), **AWK** and **Node.js** (if using [Executables](https://github.com/Type-Delta/FFnorm/releases), Node.js is **unnecessary**).
+Required dependencies are **FFmpeg**, **FFprobe** (shipped with FFmpeg), **AWK** and **Node.js** (if using [Executables](https://github.com/Type-Delta/FFnorm/releases), Node.js is **unnecessary**).
 
 didn't have them?
 
@@ -31,7 +31,7 @@ input path can be File or Folder
 ```
 ffnorm scan -i "path/to/input/folder"
 ```
-you can also specifiy **Target** loudness as guideline
+you can also specify **Target** loudness as guideline
 ```
 ffnorm scan -i "path/to/input/folder" --target -9
 ```
@@ -93,5 +93,9 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 - getting audio bitrate
 > `ffprobe -v fatal -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1  audio.wav"`
 - modifying audio Gains
-> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -id3v2_version 3 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy ouput.wav`
+> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -id3v2_version 3 -q:a (QSCALE) -af "volume=(GAIN)dB" -id3v2_version 3 -c:v copy output.wav`
+
+or
+
+> `ffmpeg -hide_banner -y -i input.wav -movflags use_metadata_tags -map_metadata 0 -id3v2_version 3 -af "volume=(GAIN)dB" -id3v2_version 3 -b:a (BITRATE) -c:v copy output.wav`
 

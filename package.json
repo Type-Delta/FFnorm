@@ -1,6 +1,6 @@
 {
   "name": "ffnorm",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "automatic audio Normalization tool powered by FFmpeg for normalizing large batch of files.",
   "main": "ffnorm.js",
   "bin": "ffnorm.js",

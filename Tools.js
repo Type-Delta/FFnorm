@@ -1,15 +1,20 @@
 //////////// Tools ////////////
 /**tools for Javascript
- * @version 2.11.2
+ * @version 2.12.4
  * for Node.js >= 16.x.x
  * @changes
- * - updated parseArgs()
+ * - added Prograss class
+ * - added spacial bit-wise operators
+ * - added hyperLink() function
  */
 "use strict";
-const onNodeJS = (typeof window === 'undefined');
-const Modules = {
+const onJSRuntime = (typeof window === 'undefined'||typeof process !== 'undefined');
+var _modules = {
    dgram: null,
-   nodeWorker: null
+   worker_threads: null,
+   os: null,
+   /**3rd party Module*/
+   mathjs: null,
 };
 
 /**for `Tools.getMatchAllResult()`
@@ -66,17 +71,17 @@ class Point {
    get unit(){
       return this.#_unit;
    }
-   /**dimention that this Point is stored in
+   /**dimension that this Point is stored in
     * @type {number}
     */
-   get dimention(){
+   get dimension(){
       return this.#_d;
    }
 
 
    #_unit;
    #_d = 0;
-   constructor(x, y, z){
+   constructor(x, y, z = null){
       this.x = x;
       this.y = y;
       this.z = z;
@@ -85,7 +90,7 @@ class Point {
       else if(x) this.#_d = 1;
    }
 
-   /**Convert from Cartesian to Polar coordinates where **Theta** (t) units is spacified by `unit`
+   /**Convert from Cartesian to Polar coordinates where **Theta** (t) units is specified by `unit`
     * @param {'r'|'d'} [unit='r'] unit of `t` **R**adians or **D**egrees (default to Radians)
     */
    toPolarCoords(unit = 'r'){
@@ -115,7 +120,7 @@ class Point {
 
    /**set unit of **Theta** (t) and convert its value to reflects the changes
     *
-    * units is spacified by `unit`
+    * units is specified by `unit`
     * @param {'r'|'d'} [unit] unit of `t` **R**adians or **D**egrees (default to Radians)
     */
    setUnit(unit){
@@ -133,9 +138,105 @@ class Point {
 }
 
 
+class Dopri {
+   /**## Dormand-Prince method
+    *
+    * a type of Runge-Kutta method used for solving ordinary differential equations (ODEs).
+    *
+    * ## This Class is used by `MathKit.dopri()` function.
+    *
+    * ## use `Dopri.at()` to get the result of the integration.
+    *
+    * from: [npm-numeric](https://github.com/sloisel/numeric/tree/master)
+    *
+    * for more info on how the calculation is done, visit [Numerary](https://numerary.readthedocs.io/en/latest/dormand-prince-method.html).
+    *
+    * for more info on **Butcher tableau** and the method, visit [Dormand-Prince method Wiki](https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method)
+    *
+    */
+   constructor(x,y,f,ymid,iterations,msg,events) {
+      this.x = x;
+      this.y = y;
+      this.f = f;
+      this.ymid = ymid;
+      this.iterations = iterations;
+      this.events = events;
+      this.message = msg;
+   }
+
+   _at(xi, j) {
+      function sqr(x) { return x * x; }
+      let x0, x1, xh, y0, y1, yh;
+      let h;
+      let p, q, w;
+      x0 = this.x[j];
+      x1 = this.x[j + 1];
+      y0 = this.y[j];
+      y1 = this.y[j + 1];
+      h = x1 - x0;
+      xh = x0 + 0.5 * h;
+      yh = this.ymid[j];
+      p = this.f[j] - (y0 * (1 / (x0 - xh) + 2 / (x0 - x1)));
+      q = this.f[j + 1] - (y1 * (1 / (x1 - xh) + 2 / (x1 - x0)));
+      w = [
+         sqr(xi - x1) * (xi - xh) / sqr(x0 - x1) / (x0 - xh),
+         sqr(xi - x0) * sqr(xi - x1) / sqr(x0 - xh) / sqr(x1 - xh),
+         sqr(xi - x0) * (xi - xh) / sqr(x1 - x0) / (x1 - xh),
+         (xi - x0) * sqr(xi - x1) * (xi - xh) / sqr(x0 - x1) / (x0 - xh),
+         (xi - x1) * sqr(xi - x0) * (xi - xh) / sqr(x0 - x1) / (x1 - xh)
+      ];
+
+      return (((y0 * w[0] + yh * w[1]) + y1 * w[2]) + (p * w[3])) + (q * w[4]);
+   }
+
+   /**
+    * @param {number|number[]} x
+    */
+   at(x) {
+      let i, j, k;
+      if (typeof x !== "number") {
+         let n = x.length, ret = Array(n);
+         for (i = n - 1; i !== -1; --i) {
+            ret[i] = this.at(x[i]);
+         }
+         return ret;
+      }
+
+      let x0 = this.x;
+      i = 0; j = x0.length - 1;
+      while (j - i > 1) {
+         k = Math.floor(0.5 * (i + j));
+         if (x0[k] <= x) i = k;
+         else j = k;
+      }
+      return this._at(x, i);
+   }
+}
+
+
+class ParseArg_Arg {
+   value;
+   index;
+   type;
+   constructor(value, index = -1, type) {
+      this.value = value;
+      this.type = type;
+      this.index = index;
+   }
+
+   valueOf() {
+      return this.value;
+   }
+
+   toString() {
+      return this.value.toString();
+   }
+}
+
 
 function isWorkerTransferable(obj){
-   return typeof obj == 'number'
+   return obj == null
+      || typeof obj == 'number'
       || typeof obj == 'string'
       || typeof obj == 'boolean'
       || obj instanceof ArrayBuffer
@@ -148,6 +249,56 @@ function isWorkerTransferable(obj){
 
 
 const Tools = {
+   _modules,
+
+   /**
+   Check if [`argv`](https://nodejs.org/docs/latest/api/process.html#process_process_argv) has a specific flag.
+
+   from npm package [has-flag](https://www.npmjs.com/package/has-flag)
+   @param {string} flag
+   @param {string[]} [argv=process?.argv] arguments Array
+   @param flag - CLI flag to look for. The `--` prefix is optional.
+   @param argv - CLI arguments. Default: `process.argv`.
+   @returns Whether the flag exists.
+   @example
+   ```
+   // $ ts-node foo.ts -f --unicorn --foo=bar -- --rainbow
+
+   // foo.ts
+   import hasFlag = require('has-flag');
+
+   hasFlag('unicorn');
+   //=> true
+
+   hasFlag('--unicorn');
+   //=> true
+
+   hasFlag('f');
+   //=> true
+
+   hasFlag('-f');
+   //=> true
+
+   hasFlag('foo=bar');
+   //=> true
+
+   hasFlag('foo');
+   //=> false
+
+   hasFlag('rainbow');
+   //=> false
+   ```
+   */
+   argvHasFlag(flag, argv = process?.argv) {
+      if(!argv||!flag) return false;
+
+      const prefix = flag.startsWith('-') ? '' : (flag.length === 1 ? '-' : '--');
+      const position = argv.indexOf(prefix + flag);
+      const terminatorPosition = argv.indexOf('--');
+      return position !== -1 && (terminatorPosition === -1 || position < terminatorPosition);
+   },
+
+
    /**similar to `sleep()` but this won't block the synchronous thread
     * @param {number}milliseconds how long to pause in milliseconds
     */
@@ -168,6 +319,7 @@ const Tools = {
    },
 
 
+
    /**format JSON string to make it more human-readable
     * ***Waring:* in the current version this function will remove any White-Space in the string which can cause MASSIVE INFORMATION LOSS!!**
     * @param {string}JsonString
@@ -176,9 +328,9 @@ const Tools = {
    beautifyJson(JsonString){
       JsonString = JsonString.replace(/\s/, ""); //remove SPACE
       let _string = JsonString + "";
-      let openBrackets = Tools.getMatchAllIndexs(JsonString.matchAll(/[{\[]/g))
+      let openBrackets = Tools.getMatchAllIndexes(JsonString.matchAll(/[{\[]/g))
          .sort((a, b) => a - b);
-      let closeBrackets = Tools.getMatchAllIndexs(JsonString.matchAll(/[}\]]/g))
+      let closeBrackets = Tools.getMatchAllIndexes(JsonString.matchAll(/[}\]]/g))
          .sort((a, b) => a - b);
 
 
@@ -218,19 +370,19 @@ const Tools = {
          //add \n
          // console.log(reading, nextNearest);
          let isolated = JsonString.substring(reading, nextNearest);
-         let quoteIndex = Tools.getMatchAllIndexs(isolated.matchAll("\""))
+         let quoteIndex = Tools.getMatchAllIndexes(isolated.matchAll("\""))
             .filter(i => i != 0? isolated[i - 1] != "\\": true); //remove index of " that has \ as prefix
          if((quoteIndex.length % 2) != 0)
             throw new Error("cannot match Double-Quote correctly from string: \"" + isolated + '\"');
 
-         let needNewLine = Tools.getMatchAllIndexs(isolated.matchAll(/[,]/g))
+         let needNewLine = Tools.getMatchAllIndexes(isolated.matchAll(/[,]/g))
             .filter(i => {
                // remove commas that were inside any of ""
                for (let l = 0; l < quoteIndex.length; l += 2)
                   if (i > quoteIndex[l] && i < quoteIndex[l + 1]) return false;
                return true;
             });
-         // const needSpace = Tools.getMatchAllIndexs(isolated.matchAll(/[:]/g))
+         // const needSpace = Tools.getMatchAllIndexes(isolated.matchAll(/[:]/g))
          //    .filter(i => {
          //       // remove commas that were inside any of ""
          //       for (let l = 0; l < quoteIndex.length; l += 2)
@@ -344,6 +496,54 @@ const Tools = {
 
 
 
+   CheckCache: class CheckCache {
+      static #supportsColor;
+      static #supportsHyperlink;
+      static #forceColor;
+
+      static get supportsColor(){
+         if(this.#supportsColor === undefined)
+            this.#supportsColor = Tools.supportsColor();
+
+         return this.#supportsColor;
+      }
+
+      static get supportsHyperlink(){
+         if(this.#supportsHyperlink === undefined)
+            this.#supportsHyperlink = Tools.supportsHyperlink();
+
+         return this.#supportsHyperlink;
+      }
+
+      static get forceColor(){
+         if(this.#forceColor === undefined){
+            const env = process.env;
+
+            if (Tools.argvHasFlag('no-color') ||
+               Tools.argvHasFlag('no-colors') ||
+               Tools.argvHasFlag('color=false')) {
+               this.#forceColor = false;
+            } else if (Tools.argvHasFlag('color') ||
+               Tools.argvHasFlag('colors') ||
+               Tools.argvHasFlag('color=true') ||
+               Tools.argvHasFlag('color=always')) {
+               this.#forceColor = true;
+            }
+
+            if ('FORCE_COLOR' in env) {
+               this.#forceColor = env.FORCE_COLOR.length === 0 || parseInt(env.FORCE_COLOR, 10) !== 0;
+            }
+         }
+
+         return this.#forceColor;
+      }
+      static set forceColor(value){
+         this.#forceColor = value;
+      }
+   },
+
+
+
    /**clean array
     * @param {any[]} Arr array to clean
     * @param {any|any[]} itemToClean items to wipe off, optional(if None is provide,
@@ -374,6 +574,7 @@ const Tools = {
    cleanString(string){
       return string.replace(/\[[0-9]+m|\\x1b\[[0-9]+m/g, '');
    },
+
 
 
 
@@ -458,13 +659,16 @@ const Tools = {
       },
 
 
-      /**return **Longest Common Subsequence** of two string or array
+      /**## **Longest Common Subsequence**
+       *
+       * return **Longest Common Subsequence** of two string or array
        * where each value can be compare with each other;
        * this is useful for determining how close those
        * Arrays/string are in terms of equality
        * @param {string|any[]} arrA
        * @param {string|any[]} arrB
-       * @param comparator function that return `true` when the given values
+       * @param {function(any|string, any|string): boolean}
+       * comparator function that return `true` when the given values
        * is considered Equal
        */
       LCS_of(arrA, arrB, comparator = (a, b) => a === b){
@@ -534,8 +738,44 @@ const Tools = {
       },
 
 
+      /**## **Longest Common Subsequence** length
+       *
+       * return the **Longest Common Subsequence** length of two string or array
+       * where each value can be compare with each other
+       *
+       * this is useful for determining how close those
+       * Arrays/string are in terms of equality
+       *
+       * this is a bit faster than `LCS_of()` since it doesn't have to find
+       * the LCS string itself
+       *
+       * from [GeeksForGeeks](https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/)
+       * @param {string|any[]} arrA
+       * @param {string|any[]} arrB
+       * @param {function(any|string, any|string): boolean}
+       * comparator function that return `true` when the given values
+       * is considered Equal
+       * @returns {number} length of the LCS string
+       */
+      LCSLength_of(arrA, arrB, comparator = (a, b) => a === b){
+         return lcsLength(arrA, arrB, arrA.length, arrB.length);
 
-      /**returns **Term Frequency - Inverse Documents Frequency**
+         function lcsLength(a,  b, aIndex, bIndex){
+            if (aIndex == 0 || bIndex == 0) return 0;
+            if(comparator(a[aIndex-1], b[bIndex-1]))
+               return 1 + lcsLength(a, b, aIndex-1, bIndex-1);
+            else
+               return Math.max(
+               lcsLength(a, b, aIndex, bIndex-1), lcsLength(a, b, aIndex-1, bIndex)
+            );
+         }
+      },
+
+
+
+      /**## **Term Frequency - Inverse Documents Frequency**
+       *
+       * returns **Term Frequency - Inverse Documents Frequency**
        * of every words in the the `documents`, where `documents`
        * is a 2d Array of words:
        * row: each document
@@ -606,8 +846,10 @@ const Tools = {
        * @param {Map<string, TFIDFValues>[]} TFIDFMaps
        * @param {string[][]} documents
        * 2d Array of words:
+       *
        * row: each document
-       * col: each word;
+       *
+       * col: each word
        * @returns {Map<string, TFIDFValues>[]}
        * array contain TFIDFValues for every words in every Document
        */
@@ -678,6 +920,117 @@ const Tools = {
 
          return tfidf_maps;
       },
+
+
+      /**
+       * @typedef {Object} WagnerResult
+       * @property {number} distance **Levenshtein distance** of two string or array
+       * @property {function(): {type: 'insert'|'delete'|'replace', index: number, value: any}[]} getOperations return an array of operations needed to transform A string to B
+       */
+      /**## **Wagner & Fischer Algorithm**
+       *
+       * calculate the **Levenshtein distance** of two string or array
+       * telling how many operations needed to transform one A string to B
+       *
+       * @param {string|any[]} arrA
+       * @param {string|any[]} arrB
+       * @param {function(any|string, any|string): boolean}
+       * comparator function that return `true` when the given values
+       * is considered Equal
+       * @returns {WagnerResult} result of the calculation
+       */
+      wagnerFischer_of(arrA, arrB, commparator = (a, b) => a === b){
+         let matrix = [];
+         let row, col;
+         // fill the first row and column of the matrix
+         for(row = 0; row <= arrA.length; row++) matrix[row] = [row];
+         for(col = 0; col <= arrB.length; col++) matrix[0][col] = col;
+
+         for(row = 1; row <= arrA.length; row++){
+            for(col = 1; col <= arrB.length; col++){
+               if(commparator(arrA[row-1], arrB[col-1])){
+                  matrix[row][col] = matrix[row-1][col-1];
+                  continue;
+               }
+
+               matrix[row][col] = Math.min(
+                  matrix[row-1][col-1] + 1,
+                  Math.min(
+                     matrix[row][col-1] + 1,
+                     matrix[row-1][col] + 1
+                  )
+               );
+            }
+         }
+
+         return {
+            distance: matrix[arrA.length][arrB.length],
+            getOperations(){
+               let row = matrix.length - 1;
+               let col = matrix[0].length - 1;
+               let operations = [];
+               const s = new Tools.SafeTrue;
+
+               while((row > 0 || col > 0)&&s.True){
+                  const direction = getNextDirection(row, col, matrix);
+                  switch(direction){
+                     case 2: // up - delete
+                        operations.push({
+                           type: 'delete', index: row - 1,
+                           value: arrA[row - 1]
+                        });
+                        row--;
+                        break;
+                     case 0: // left - insert
+                        operations.push({
+                           type: 'insert', index: row,
+                           value: arrB[col - 1]
+                        });
+                        col--;
+                        break;
+                     case 1: // diagonal - substitute (replace)
+                        if(matrix[row][col] !== matrix[row - 1][col - 1]){
+                           operations.push({
+                              type: 'replace', index: row - 1,
+                              value: arrB[col - 1]
+                           });
+                        }
+                        row--;
+                        col--;
+                        break;
+                  }
+               }
+               return operations;
+
+               function getNextDirection(row, col, matrix){
+                  let dir = [
+                     matrix[row][col - 1], // left
+                     matrix[row - 1][col - 1], // diagonal
+                     matrix[row - 1][col], // up
+                  ]
+
+                  if(col <= 0) return 2;
+                  if(row <= 0) return 0;
+
+                  if(dir[0] == dir[1]){
+                     if(dir[2] == dir[1])
+                        return 1;
+                     else return 0;
+                  }
+
+                  let min = dir[0];
+                  let mIndex = 0;
+                  for(let i = 1; i < dir.length; i++){
+                     if(dir[i] < min){
+                        min = dir[i];
+                        mIndex = i;
+                     }
+                  }
+                  return mIndex;
+               }
+            }
+         };
+      }
    },
 
 
@@ -716,6 +1069,22 @@ const Tools = {
    },
 
 
+   Err: class Err extends Error {
+      /**make creating named Error object easier
+       * @param {string} message error message
+       * @param {string} name error name
+       * @param {number} code error code
+       * @param {string} stack error stacktrace
+       */
+      constructor(message, name = null, code = null, stack = null){
+         super(message);
+         if(name) this.name = name;
+         if(code) this.code = code;
+         if(stack) this.stack = stack;
+      }
+   },
+
+
    /**escape all Regular Expressions  control chars
     * @param {string} regexpStr
     */
@@ -742,14 +1111,14 @@ const Tools = {
     * @param {IterableIterator<RegExpMatchArray>}matchArr
     * @returns {number[]}
     */
-   getMatchAllIndexs(matchArr){
+   getMatchAllIndexes(matchArr){
       if(!matchArr) return [];
 
-      let indexs = [];
+      let indexes = [];
       for(const match of matchArr){
-         indexs.push(match.index);
+         indexes.push(match.index);
       }
-      return indexs;
+      return indexes;
    },
 
 
@@ -784,6 +1153,22 @@ const Tools = {
 
 
 
+   /**create Hyper link for terminal
+    *
+    * ### this works only with terminal that support hyper link
+    * @param {string}text text to display
+    * @param {string} url
+    * @returns {string} hyper link string, if the terminal doesn't support hyper link, it will return the url
+    */
+   hyperLink(text, url){
+      url = encodeURI(url);
+
+      if(!Tools.CheckCache.supportsHyperlink) return url;
+      return `\u001b]8;;${url}\u0007${text}\u001b]8;;\u0007`;
+   },
+
+
+
    /**Generate a unique id base on ID-pallet
     * @param {Array<string>|Set<string>}alreadyExistedIDs Array of IDs that already existed to not generate a duplicated
     * @param {string}pallet the structure of ID, the length of it would be the same for generated ID.
@@ -805,7 +1190,7 @@ const Tools = {
          for(let i = 0; pallet.length > id.length; i++){
             switch (pallet[i]) {
                case 'C':
-                  id += string.fromCharCode(
+                  id += String.fromCharCode(
                      Tools.getRandomInt(97, 122) - (32 * Tools.getRandomInt(0, 1))
                   );
                continue;
@@ -816,7 +1201,7 @@ const Tools = {
 
                case 'B':
                   if(Tools.getRandomInt(0, 1)){
-                     id += string.fromCharCode(
+                     id += String.fromCharCode(
                         Tools.getRandomInt(97, 122) - (32 * Tools.getRandomInt(0, 1))
                      );
                   }else id += Tools.getRandomInt(0, 9).toString();
@@ -877,7 +1262,9 @@ const Tools = {
    },
 
 
-   /**## Inter-process Communication
+
+   /**
+    * ## Inter-process Communication
     * IPC which is capable of tranfering most standard Javascript Objects
     *
     * ### Important! this class may requires *`dgram`* or *`worker_threads`* (NodeJS module) that will be imported upon calling
@@ -887,7 +1274,7 @@ const Tools = {
     * @example
     * // using the dgram module
     * const ipc = new Tools.IPC('udp4', 30000);
-    * ipc.on('mymsgchannel', (msg) => { // recive message from other end
+    * ipc.on('mymsgchannel', (msg) => { // receive message from other end
     *   console.log(msg);
     * });
     * // send message to the other end
@@ -916,7 +1303,7 @@ const Tools = {
     *   ipc.send('mymsgchannel', 'work done!');
     * }
     */
-   IPC: class IPC {
+   IPC: class {
       static Package = class Package {
          channel;
          content;
@@ -953,12 +1340,14 @@ const Tools = {
        */
       #listeners = new Map;
       #proto;
+      #tagetAdd = 'localhost';
       /**the port this IPC is on or Worker object if using `nodeworker`
        * @type {number|Worker|@require('worker_threads').parentPort}
        */
       port;
       get protocol(){ return this.#proto; };
 
+      // LINK: dn4kas
       /**## Inter-process Communication
        * IPC which is capable of tranfering most standard Javascript Objects
        *
@@ -969,7 +1358,7 @@ const Tools = {
        * @example
        * // using the dgram module
        * const ipc = new Tools.IPC('udp4', 30000);
-       * ipc.on('mymsgchannel', (msg) => { // recive message from other end
+       * ipc.on('mymsgchannel', (msg) => { // receive message from other end
        *   console.log(msg);
        * });
        * // send message to the other end
@@ -999,28 +1388,30 @@ const Tools = {
        * }
        */
       constructor(protocol = 'udp4', port = null){
-         if(!onNodeJS) throw new Error('IPC is only available on NodeJS, due to the use of NodeJS modules');
+         if(!onJSRuntime) throw new Error('IPC is only available on JSRuntime, due to the use of Node modules');
 
          if(protocol != 'nodeworker'&&protocol != 'udp4'&&protocol != 'udp6')
             throw new Error(`protocol must be 'nodeworker', 'udp4' or 'udp6' instead given '${protocol}'`);
 
          this.#proto = protocol;
-
-         if(!Modules.dgram&&protocol != 'nodeworker')
-            Modules.dgram = require('dgram');
+         if(!_modules.dgram&&protocol != 'nodeworker'){
+            throw new Error(`module 'dgram' not loaded use 'Tools._modules.dgram = require("dgram")' to load it`);
+         }
 
          if(protocol == 'nodeworker'){
-            if(!Modules.nodeWorker) Modules.nodeWorker = require('worker_threads');
+            if(!_modules.worker_threads){
+               throw new Error(`module 'worker_threads' not loaded use 'Tools._modules.worker_threads = require("worker_threads")' to load it`);
+            }
 
             if(
-               !(port instanceof Modules.nodeWorker.Worker)&&
-               port !== Modules.nodeWorker.parentPort&&
+               !(port instanceof _modules.worker_threads.Worker)&&
+               port !== _modules.worker_threads.parentPort&&
                port != null
             ) throw new Error(`port must be a type of 'Worker' or a 'parentPort' instead given '${typeof port}'`);
             if(!port){
-               if(Modules.nodeWorker.isMainThread)
+               if(_modules.worker_threads.isMainThread)
                   throw new Error('when using `nodeworker` protocol, `port` must be provided if on the main thread');
-               this.#socket = Modules.nodeWorker.parentPort;
+               this.#socket = _modules.worker_threads.parentPort;
                this.#init();
                return;
             }
@@ -1031,7 +1422,7 @@ const Tools = {
          }
 
          this.port = port;
-         this.#socket = Modules.dgram.createSocket(protocol);
+         this.#socket = _modules.dgram.createSocket(protocol);
          this.#init();
       }
 
@@ -1048,6 +1439,22 @@ const Tools = {
                resolve(this.port = port);
             });
          });
+      }
+
+      /**bind sender to a specific address
+       *
+       * this allows message to be sent across devices
+       * @param {string} address IPv4 address separated by dots
+       */
+      bind(address){
+         if(this.protocol == 'nodeworker') return;
+         this.#tagetAdd = address;
+      }
+
+
+      close(){
+         if(this.protocol == 'nodeworker') return;
+         this.#socket.close();
       }
 
       /**send masssage to the other end
@@ -1068,7 +1475,7 @@ const Tools = {
                channel,
                contents: contents.map(c => {
                   if(isWorkerTransferable(c)) return c;
-                  return JSON.stringify(c, Tools.JSONReplacer);
+                  return '@JSON:' + JSON.stringify(c, Tools.JSONReplacer);
                })
             }: Buffer.from(
                JSON.stringify({
@@ -1090,7 +1497,7 @@ const Tools = {
                return;
             }
 
-            this.#socket.send(_package, this.port, 'localhost', (err, bytes) => {
+            this.#socket.send(_package, this.port, this.#tagetAdd, (err, bytes) => {
                if(err) reject(err);
                resolve();
             });
@@ -1158,8 +1565,8 @@ const Tools = {
             const tartget_cb = lis_cb.find(lis => lis.callback == listener);
             if(!tartget_cb) continue;
 
-            const filltered = lis_cb.filter(lis => lis.callback != listener);
-            if(!filltered) {
+            const filtered = lis_cb.filter(lis => lis.callback != listener);
+            if(!filtered) {
                this.#listeners.delete(channel);
                return true;
             }
@@ -1171,6 +1578,50 @@ const Tools = {
          }
 
          return false;
+      }
+
+      /**A quick way to send a message and wait for a response
+       * with built-in timeout
+       * @param {string} channel channel to send this message to
+       * @param {number|null} timeout timeout in milliseconds, if expired the promise will be rejected
+       * @param {...*} contents contents (massages) to send, can be any standard Javascript objects
+       * @returns {Promise<any>}
+       * @throws `IPCAskTimeout`
+       */
+      async ask(channel, timeout, ...contents){
+         return new Promise((resolve, reject) => {
+            let transmitTimeout;
+            if(timeout){
+               transmitTimeout = setTimeout(() => {
+                  reject(new Tools.Err(`Tools.IPC: ask timeout on channel: ${channel}`, 'IPCAskTimeout'));
+               }, timeout);
+            }
+
+            this.once(channel, res => {
+               if(timeout) clearTimeout(transmitTimeout);
+               resolve(res);
+            });
+
+            this.send(channel, ...contents);
+         });
+      }
+
+      /**listen on the given channel for messages
+       *
+       * **Similar to** `ipc.on(channel, callback)` but will respond with what `callback`
+       * function returns to the same channel
+       *
+       * @param {string} channel channel to send this message to
+       * (if the receiver end didn't listen for this channel they won't see this masssage)
+       * @param {function(...any): any|function(...any): Promise<any>} callback callback when the massage for this channel is received
+       */
+      onAsk(channel, callback) {
+         const handleAsk = async (...args) => {
+            const res = await callback(...args);
+            this.send(channel, res);
+         }
+
+         this.on(channel, handleAsk);
       }
 
       /**
@@ -1190,8 +1641,8 @@ const Tools = {
             {
                channel: rawPackage.channel,
                contents: rawPackage.contents.map(c => {
-                  if(typeof c == 'string'&&c.includes('"@dataType":'))
-                     return JSON.parse(c, Tools.JSONReviver);
+                  if(typeof c == 'string'&&c.startsWith('@JSON:'))
+                     return JSON.parse(c.slice(6), Tools.JSONReviver);
                   return c;
                })
             }:
@@ -1240,6 +1691,7 @@ const Tools = {
       if(/[:?"<>|*]/g.test(path)) return false;
       return true;
    },
+
 
    /**a JSON Replacer for `JSON.stringify()`
     * that allow most standard Javascript Object to be parsed including **Map** and **Set**
@@ -1316,7 +1768,7 @@ const Tools = {
     * //  }
     */
    JSONReviver(key, value) {
-      if (!value['@dataType']) return value;
+      if (!value||!value['@dataType']) return value;
 
       switch(value['@dataType']){
          case 'function':
@@ -1356,11 +1808,7 @@ const Tools = {
       if(!path||!path?.length)
          throw 'path is either falsy or empty!';
 
-      const badChars = new RegExp('[:?"<>|*]', 'g');
-      if(badChars.test(path))
-         return path.replace(badChars, replaceStr);
-
-      return path;
+      return path.replace(/[:?"<>|*]/g, replaceStr);
    },
 
 
@@ -1379,11 +1827,11 @@ const Tools = {
          );
       }
 
-      if(url.includes("&list=")){
+      if(url.includes("&list=")){ // remove playlist id
          url = url.split("&list=")[0];
       }
 
-      if(url.includes("?si=")){
+      if(url.includes("?si=")){ // remove si tag
          url = url.split("?si=")[0];
       }
 
@@ -1411,6 +1859,8 @@ const Tools = {
          fileExt == 'png'||
          fileExt == 'svg'||
          fileExt == 'jfif'||
+         fileExt == 'pbm'||
+         fileExt == 'pgm'||
          fileExt == 'jpeg'
       );
       const text = (
@@ -1452,6 +1902,7 @@ const Tools = {
          fileExt == 'mkv'||
          fileExt == 'mov'||
          fileExt == 'wav'||
+         fileExt == 'gif'||
          fileExt == 'webm'
       )
 
@@ -1464,19 +1915,35 @@ const Tools = {
 
 
 
-
-
-
    jsTime: {
-      howLong: function(lastDate, nowDate = new Date()){
+      howLong(lastDate, nowDate = new Date()){
          let msDifference = nowDate.getTime() - lastDate.getTime();
-         return Tools.getTimeFromMS(msDifference).modern();
+         return Tools.jsTime.getTimeFromMS(msDifference).modern();
       },
-      getTimeFromMS: function(milliseconds){
+
+      /**
+       * @typedef {object} Time
+       * @property {number} year
+       * @property {number} month
+       * @property {number} days
+       * @property {number} hr
+       * @property {number} min
+       * @property {number} sec
+       * @property {string} ms
+       * @property {function(): string} toString
+       * @property {function(): string} modern to modern time string
+       */
+      /**## Time from Millisecond
+       *
+       * calculate minute, hour, day etc. from millisecond
+       * @param {number} ms millisecond
+       * @returns {Time}
+       */
+      getTimeFromMS(ms){
          let year = 0, month = 0, days = 0, hr = 0, min = 0, sec = 0;
-         const useDDMMYYYformat = (milliseconds > 262800200);
-         while(milliseconds >= 1000){
-            milliseconds -= 1000;
+         const useDDMMYYYFormat = (ms > 262800200);
+         while(ms >= 1000){
+            ms -= 1000;
             sec++;
          }
          while(sec >= 60){
@@ -1488,7 +1955,7 @@ const Tools = {
             hr++;
          }
 
-         if(useDDMMYYYformat){
+         if(useDDMMYYYFormat){
             while(hr >= 24){
                hr -= 24;
                days++;
@@ -1506,47 +1973,34 @@ const Tools = {
          }
 
 
-         milliseconds = milliseconds.toString();
-         while(milliseconds.length < 3&&milliseconds !== '00'){
-            milliseconds = '0' + milliseconds;
-         }
-
-
-         if(useDDMMYYYformat){
+         if(useDDMMYYYFormat){
             return {
-               full: `${year}:${month}:${days}|${hr}:${min}:${sec}.${milliseconds}`,
-               modern: function(){
-                  if(year + month + days + sec + min + hr == 0){
-                     return `${milliseconds}ms`;
-                  }else if(year + month + days + min + hr == 0){
-                     return `${sec}.${milliseconds}s`
-                  }else if(year + month + days + hr == 0){
-                     return `${min}min ${sec}s`
-                  }else if(year + month + days == 0){
-                     return `${hr}hr ${min}min`;
-                  }else if(year + month == 0){
-                     return `${days}days ${hr}hr`
-                  }else if(year == 0){
-                     return `${month}months ${days}days`
-                  }else return `${year}year ${month}months`
-               }
-            }
-
-         }else{
-            return {
-               full: `${hr}:${min}:${sec}.${milliseconds}`,
-               modern: function(){
-                  if(sec + min + hr == 0){
-                     return `${milliseconds}ms`;
-                  }else if(min + hr == 0){
-                     return `${sec}.${milliseconds}s`
-                  }else if(hr == 0){
-                     return `${min}min ${sec}s`
-                  }else return `${hr}hr ${min}min`
+               year, month, days, hr, min, sec, ms,
+               toString(){
+                  return `${year}:${month}:${days}|${hr}:${min}:${sec}.${ms.toString().padStart(3, '0')}`;
+               },
+               modern(){
+                  if(year + month + days + sec + min + hr == 0) return `${ms}ms`;
+                  else if(year + month + days + min + hr == 0) return `${sec}.${ms}s`
+                  else if(year + month + days + hr == 0) return `${min}min ${sec}s`
+                  else if(year + month + days == 0) return `${hr}hr ${min}min`;
+                  else if(year + month == 0) return `${days}days ${hr}hr`
+                  else if(year == 0) return `${month}months ${days}days`
+                  else return `${year}year ${month}months`
                }
             }
          }
 
+         return {
+            year, month, days, hr, min, sec, ms,
+            toString() { return `${hr}:${min}:${sec}.${ms.toString().padStart(3, '0')}`; },
+            modern(){
+               if(sec + min + hr == 0) return `${ms}ms`;
+               else if(min + hr == 0) return `${sec}.${ms}s`
+               else if(hr == 0) return `${min}min ${sec}s`
+               else return `${hr}hr ${min}min`
+            }
+         }
       }
    },
 
@@ -1567,6 +2021,7 @@ const Tools = {
    lerp(Min, Max, Percentage){
       return Min + (Max - Min) * Percentage;
    },
+
 
 
    /**ToolsKit for doing complex math
@@ -1592,6 +2047,272 @@ const Tools = {
          );
       },
 
+      /**## Dormand-Prince method
+       *
+       * a type of Runge-Kutta method used for solving ordinary differential equations (ODEs).
+       *
+       * from: [npm-numeric](https://github.com/sloisel/numeric/tree/master)
+       *
+       * for more info on how the calculation is done, visit [Numerary](https://numerary.readthedocs.io/en/latest/dormand-prince-method.html).
+       *
+       * for more info on **Butcher tableau** and the method, visit [Dormand-Prince method Wiki](https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method)
+       *
+       * @param {number} x0 initial x value
+       * @param {number} x1 final x value
+       * @param {number} y0 initial y value
+       * @param {function(number, number): number} f function to be integrated
+       * @param {number} [tol=1e-6] tolerance
+       * @param {number} [maxit=1000] maximum number of iterations
+       * @param {function(number, number): number|undefined} [event] event function
+       */
+      dopri(x0, x1, y0, f, tol = 1e-6, maxit = 1000, event) {
+         let xs = [x0], ys = [y0], k1 = [f(x0, y0)], k2, k3, k4, k5, k6, k7, ymid = [];
+
+         // Butcher tableau
+         const A2 = 1 / 5;
+         const A3 = [3 / 40, 9 / 40];
+         const A4 = [44 / 45, -56 / 15, 32 / 9];
+         const A5 = [19372 / 6561, -25360 / 2187, 64448 / 6561, -212 / 729];
+         const A6 = [9017 / 3168, -355 / 33, 46732 / 5247, 49 / 176, -5103 / 18656];
+         const b = [35 / 384, 0, 500 / 1113, 125 / 192, -2187 / 6784, 11 / 84];
+         const bm = [
+            0.5 * 6025192743 / 30085553152,
+            0,
+            0.5 * 51252292925 / 65400821598,
+            0.5 * -2691868925 / 45128329728,
+            0.5 * 187940372067 / 1594534317056,
+            0.5 * -1776094331 / 19743644256,
+            0.5 * 11237099 / 235043384
+         ];
+         const c = [1 / 5, 3 / 10, 4 / 5, 8 / 9, 1, 1];
+         const e = [-71 / 57600, 0, 71 / 16695, -71 / 1920, 17253 / 339200, -22 / 525, 1 / 40];
+
+
+         let i = 0, er, j;
+         let h = (x1 - x0) / 10;
+         let it = 0;
+         let y1, erinf;
+         let e0, e1, ev;
+         let ret = new Dopri(xs, ys, k1, ymid, -1, "");
+         if (typeof event === "function") e0 = event(x0, y0);
+
+         while (x0 < x1 && it < maxit) {
+            ++it;
+            if (x0 + h > x1) h = x1 - x0;
+
+            k2 = f(
+               x0 + c[0] * h,
+               (y0 + (A2 * h * k1[i]))
+            );
+            k3 = f(
+               x0 + c[1] * h,
+               ((y0 + (A3[0]* h * k1[i])) + (A3[1] * h * k2))
+            );
+            k4 = f(
+               x0 + c[2] * h,
+               (((y0 + (A4[0] * h * k1[i])) + (A4[1] * h * k2)) + (A4[2] * h * k3))
+            );
+            k5 = f(
+               x0 + c[3] * h,
+               ((((y0 + (A5[0] * h * k1[i])) + (A5[1] * h * k2)) + (A5[2] * h * k3)) + (A5[3] * h * k4))
+            );
+            k6 = f(
+               x0 + c[4] * h,
+               (
+                  y0 + (A6[0] * h * k1[i]) + (A6[1] * h * k2) +
+                  (A6[2] * h * k3) + (A6[3] * h * k4) + (A6[4] * h * k5)
+               )
+            );
+            y1 = (
+               y0 + (k1[i] * h * b[0]) + (k3 * h * b[2]) + (k4 * h * b[3]) +
+               (k5 * h * b[4]) + (k6 * h * b[5])
+            );
+            k7 = f(x0 + h, y1);
+            er = (
+               (k1[i] * h * e[0]) + (k3 * h * e[2]) + (k4 * h * e[3]) +
+               (k5 * h * e[4]) + (k6 * h * e[5])) + (k7 * h * e[6]
+            );
+
+            erinf = Math.abs(er);
+
+            if (erinf > tol) { // reject
+               h = 0.2 * h * Math.pow(tol / erinf, 0.25);
+               if (x0 + h === x0) {
+                  ret.msg = "Step size became too small";
+                  break;
+               }
+               continue;
+            }
+            ymid[i] = (
+               y0 + (k1[i] * h * bm[0]) + (k3 * h * bm[2]) + (k4 * h * bm[3]) +
+               (k5 * h * bm[4]) + (k6 * h * bm[5]) + (k7 * h * bm[6])
+            );
+            ++i;
+            xs[i] = x0 + h;
+            ys[i] = y1;
+            k1[i] = k7;
+
+
+            if (typeof event === "function") {
+               let yi, xl = x0, xr = x0 + 0.5 * h, xi;
+               e1 = event(xr, ymid[i - 1]);
+               ev = e0 < 0 && 0 < e1;
+
+               if(ev){
+                  let en, ei;
+                  let side = 0, sl = 1.0, sr = 1.0;
+                  while (1) {
+                     if (typeof e0 === "number") xi = (sr * e1 * xl - sl * e0 * xr) / (sr * e1 - sl * e0);
+                     else {
+                        xi = xr;
+                        for (j = e0.length - 1; j !== -1; --j) {
+                           if (e0[j] < 0 && e1[j] > 0) xi = Math.min(xi, (sr * e1[j] * xl - sl * e0[j] * xr) / (sr * e1[j] - sl * e0[j]));
+                        }
+                     }
+                     if (xi <= xl || xi >= xr) break;
+                     yi = ret._at(xi, i - 1);
+                     ei = event(xi, yi);
+                     en = e0 < 0 && 0 < ei;
+                     if (en) {
+                        xr = xi;
+                        e1 = ei;
+                        ev = en;
+                        sr = 1.0;
+                        if (side === -1) sl *= 0.5;
+                        else sl = 1.0;
+                        side = -1;
+                     } else {
+                        xl = xi;
+                        e0 = ei;
+                        sl = 1.0;
+                        if (side === 1) sr *= 0.5;
+                        else sr = 1.0;
+                        side = 1;
+                     }
+                  }
+                  y1 = ret._at(0.5 * (x0 + xi), i - 1);
+                  ret.f[i] = f(xi, yi);
+                  ret.x[i] = xi;
+                  ret.y[i] = yi;
+                  ret.ymid[i - 1] = y1;
+                  ret.events = ev;
+                  ret.iterations = it;
+                  return ret;
+               }
+
+
+               xl = xr;
+               xr = x0 + h;
+               e0 = e1;
+               e1 = event(xr, y1);
+               ev = e0 < 0 && 0 < e1;
+            }
+            x0 += h;
+            y0 = y1;
+            e0 = e1;
+            h = Math.min(0.8 * h * Math.pow(tol / erinf, 0.25), 4 * h);
+         }
+         ret.iterations = it;
+         return ret;
+      },
+
+
+      /**## calculate parts of Area under the graph
+       *
+       * expression must contains only one Variable (X)
+       *
+       * ### Note: requires `mathjs`
+       *
+       * @param {string|any}expression
+       * Math expression of **function of x** or a **mathjs** expression
+       * @param {number|string}upper upper number
+       * @param {number|string}lower lower number
+       * @returns {number} intergration result (Area)
+       *
+       * @example
+       * // enter expression directly as string
+       * integral('x^2', 1, 0) // 0.3333333333333333
+       *
+       * // or use mathjs expression
+       * const mjs = require('mathjs');
+       * integral(mjs.compile('x^2'), 1, 0) // 0.3333333333333333
+       */
+      integral(expression, upper, lower){
+         if(lower > upper) throw new Error(`lower bound must be less than upper bound`);
+         if(lower == upper) return 0;
+
+         if(!_modules.mathjs){
+            throw new Error(`module 'mathjs' not loaded use 'Tools._modules.mathjs = require("mathjs")' to load it`);
+         }
+
+         let _express;
+         if(typeof(expression) == 'string')
+            _express = _modules.mathjs.compile(expression);
+         else _express = expression;
+
+         if(typeof(lower) == 'string') lower == _modules.mathjs.evaluate(lower);
+         if(typeof(upper) == 'string') upper == _modules.mathjs.evaluate(upper);
+
+         const f_x = x => _express.evaluate({x: x});
+         return Tools.MathKit.dopri(lower, upper, 0, f_x).at(upper);
+      },
+
+
+
+      /**## Left Shift Unsigned with `0` or `(<<)`
+       *
+       * translate to `n << a`
+       *
+       * this is a workaround for the fact that Javascript bitwise operators
+       * only work on signed 32bit number
+       * @param {number} a shift amount
+       * @param {number} n number to shift
+       */
+      Lsh_us(n, a){
+         return n * (2 ** a);
+      },
+
+
+      /**## Bitwise NOT opreator for unsigned 16bit number
+       *
+       * this is a workaround for the fact that
+       * Javascript bitwise operator only work on signed 32bit number
+       *
+       * @param {number} x
+       */
+      not_us16(x){ return x ^ 0xffff },
+
+      /**## Bitwise NOT opreator for unsigned 32bit number
+       *
+       * this is a workaround for the fact that
+       * Javascript bitwise operator only work on signed 32bit number
+       *
+       * @param {number} x
+       */
+      not_us32(x){ return x ^ 0xffffffff },
+
+      /**## Bitwise NOT opreator for unsigned 8bit number
+       *
+       * this is a workaround for the fact that
+       * Javascript bitwise operator only work on signed 32bit number
+       *
+       * @param {number} x
+       */
+      not_us8(x){ return x ^ 0xff },
+
+      /**map number's range
+       * @param {number} x number to map
+       * @param {number} Xmin min number of x
+       * @param {number} Xmax max number of x
+       * @param {number} Tmax target max number
+       * @param {number} Tmin target min number
+       * @requires {number} mapped number
+       */
+      map(x, Xmin, Xmax, Tmin, Tmax){
+         return (x - Xmin) / (Xmax - Xmin) * (Tmax - Tmin) + Tmin;
+      },
+
+
       /**represents a Point in 1 - 3d space
        */
       Point,
@@ -1603,7 +2324,35 @@ const Tools = {
          return deg * Math.PI / 180;
       },
 
-      /**Convert from Cartesian to Polar coordinates where **Theta** (t) units is spacified by `unit`
+
+
+      /**## Right Shift Unsigned with `0` or `(>>)`
+       *
+       * translate to `n >> a`
+       *
+       * this is a workaround for the fact that Javascript bitwise operators
+       * only work on signed 32bit number
+       * @param {number} a shift amount
+       * @param {number} n number to shift
+       */
+      Rsh_us(n, a){
+         return Math.floor(n / (2 ** a));
+      },
+
+      /**## sum
+       *
+       * return the sum of all given numbers
+       *
+       * numbers can be 1-5D array or just numbers
+       * @param {...number|number[]|number[][]|number[][][]|number[][][][]|number[][][][][]}Xs
+       * @returns {number}
+       */
+      sum: (...Xs) => {
+         Xs = Xs.flat(5);
+         return Xs.reduce((a, b) => a + b, 0);
+      },
+
+      /**Convert from Cartesian to Polar coordinates where **Theta** (t) units is specified by `unit`
        * @param {number} x
        * @param {number} y
        * @param {'r'|'d'} [unit='r'] unit of `t` **R**adians or **D**egrees (default to Radians)
@@ -1620,41 +2369,54 @@ const Tools = {
          }
       },
 
-      /**Convert from Polar to Cartesian coordinates
+      /**# Convert from Polar (Spherical coordinate system) to Cartesian coordinates
+       *
+       * about Spherical coordinate system [see](https://en.wikipedia.org/wiki/Spherical_coordinate_system)
        * @param {number} r
-       * @param {number} t angle where its units is spacified by `unit`
+       * @param {number} alpha the horizontal angle from the X axis (θ)
+       * @param {number||null} polar the vertical angle from the Z axis (φ)
        * @param {'r'|'d'} [unit='r'] unit of `t` **R**adians or **D**egrees (default to Radians)
        */
-      toCartesianCoords(r, t, unit = 'r'){
-         if(!unit||(unit != 'd'&&unit != 'r')) throw new Error("unit must be 'r' or 'd', given: " + unit);
+      toCartesianCoords(r, alpha, polar = null, unit = 'r'){
+         if(!unit||(unit != 'd'&&unit != 'r'))
+            throw new Error("unit must be 'r' or 'd', given: " + unit);
+         if(polar !== null&&typeof polar != 'number')
+            throw new Error('polar must be a number');
 
-         if(unit == 'd') t = Tools.MathKit.radians(t);
-         return {
-            x: r * Math.cos(t),
-            y: r * Math.sin(t)
+         if(unit == 'd'){
+            alpha = Tools.MathKit.radians(alpha);
+            if(polar !== null) polar = Tools.MathKit.radians(polar);
+         }
+
+         if(polar === null){
+            return {
+               x: r * Math.cos(alpha),
+               y: r * Math.sin(alpha)
+            }
+         }else{
+            return {
+               x: r * Math.sin(polar) * Math.cos(alpha),
+               y: r * Math.sin(polar) * Math.sin(alpha),
+               z: r * Math.cos(polar)
+            }
          }
       },
    },
 
 
 
-   /**similar to `Number.toFixed()` but will use minimal amount of Digits posible,
+   /**similar to `Number.toFixed()` but will use minimal amount of Digits possible,
     *
     * in short: this will remove all trailing 0's.
     * @param {number} number
     * @param {number} maxFractDigits Number of digits after the decimal point. Must be in the range 0 - 20, inclusive.
     */
    maxFraction(number, maxFractDigits){
-      const r_trailing0 = /\.?0+$/;
       const snum = number.toString();
       if (!snum.includes('.')) return snum;
 
-      return number.toFixed(maxFractDigits).replace(r_trailing0, '');
+      return number.toFixed(maxFractDigits).replace(/\.?0+$/, '');
    },
-
-
-
-
 
 
    /**(**Node Console Color**) return the Node.js Console Text formats, use this format to change
@@ -1668,9 +2430,9 @@ const Tools = {
     *
     * @param {'bg'|'fg'} mode only use when **`color`** is number (true 24bit color)
     *
-    * **'bg'** for spacifying the color as **Background color**
+    * **'bg'** for specifying the color as **Background color**
     *
-    * **'fg'** for spacifying the color as **Foreground color**
+    * **'fg'** for specifying the color as **Foreground color**
     *
     * @param {boolean} [force8Bit=false] **'8bit'** force the use of **8Bit** color instead of **24Bit** color despite given true color
     *
@@ -1685,135 +2447,55 @@ const Tools = {
     * console.log(`${ncc(0xef3820, 'fg')}%s${ncc('Reset')}`, textToLog);
     * //Log custom 24Bit red "I'm Red boi!!!" text on the Terminal
     */
-   ncc(color = null, mode = null, force8Bit = false){
+   ncc(color = null, mode = null, force8Bit = null){
       if(color == null) return '\x1b[0m';// return 'reset'
-      // let _color;
 
       // using custom 24 bit color, see: https://en.wikipedia.org/wiki/ANSI_escape_code#24-bit
       if(typeof color == 'number'){
          const rgb = Tools.Convert.decimalColorToRGB(color);
+         if(force8Bit === null) force8Bit = (Tools.CheckCache.supportsColor == 0);
 
          if(!force8Bit){
             // \x1b[<3|4>8;2;<r>;<g>;<b>m
             return `\x1b[${mode == 'bg'?'4':'3'}8;2;${rgb.r};${rgb.g};${rgb.b}m`;
          }
 
-         color = (mode == 'bg'?'bg':'') + _8bitColorFromRBG(rbg);
+         color = (mode == 'bg'?'bg':'') + _8bitColorFromRGB(rbg);
       }
 
-      // if(color.includes('+')){
-      //    _color = color.slice(color.indexOf('+') + 1);
-      //    color = color.slice(0, color.indexOf('+'));
-      // }
       color = color.toLocaleLowerCase();
 
       switch (color) {
-         case 'black':
-            return '\x1b[30m';
-         break;
+         case 'black': return '\x1b[30m';
+         case 'red': return '\x1b[31m';
+         case 'green': return '\x1b[32m';
+         case 'yellow': return '\x1b[33m';
+         case 'blue': return '\x1b[34m';
+         case 'magenta': return '\x1b[35m';
+         case 'cyan': return '\x1b[36m';
+         case 'white': return '\x1b[37m';
 
-         case 'red':
-            return '\x1b[31m';
-         break;
+         case 'reset': return '\x1b[0m';
+         case 'bright': return '\x1b[1m';
+         case 'dim': return '\x1b[2m';
+         case 'italic': return '\x1b[3m';
+         case 'blink': return '\x1b[5m';
+         case 'invert': return '\x1b[7m';
+         case 'hidden': return '\x1b[8m';
 
-         case 'green':
-            return '\x1b[32m';
-         break;
+         case 'bgblack': return '\x1b[40m';
+         case 'bgred': return '\x1b[41m';
+         case 'bggreen': return '\x1b[42m';
+         case 'bgyellow': return '\x1b[43m';
+         case 'bgblue': return '\x1b[44m';
+         case 'bgmagenta': return '\x1b[45m';
+         case 'bgcyan': return '\x1b[46m';
+         case 'bgwhite': return '\x1b[47m';
 
-         case 'yellow':
-            return '\x1b[33m';
-         break;
-
-         case 'blue':
-            return '\x1b[34m';
-         break;
-
-         case 'magenta':
-            return '\x1b[35m';
-         break;
-
-         case 'cyan':
-            return '\x1b[36m';
-         break;
-
-         case 'white':
-            return '\x1b[37m';
-         break;
-
-
-
-
-         case 'reset':
-            return '\x1b[0m';
-         break;
-
-         case 'bright':
-            return '\x1b[1m';
-         break;
-
-         case 'dim':
-            return '\x1b[2m';
-         break;
-
-         case 'italic':
-            return '\x1b[3m';
-         break;
-
-         case 'blink':
-            return '\x1b[5m';
-         break;
-
-         case 'invert':
-            return '\x1b[7m';
-         break;
-
-         case 'hidden':
-            return '\x1b[8m';
-         break;
-
-
-
-
-         case 'bgblack':
-            return '\x1b[40m';
-         break;
-
-         case 'bgred':
-            return '\x1b[41m';
-         break;
-
-         case 'bggreen':
-            return '\x1b[42m';
-         break;
-
-         case 'bgyellow':
-            return '\x1b[43m';
-         break;
-
-         case 'bgblue':
-            return '\x1b[44m';
-         break;
-
-         case 'bgmagenta':
-            return '\x1b[45m';
-         break;
-
-         case 'bgcyan':
-            return '\x1b[46m';
-         break;
-
-         case 'bgwhite':
-            return '\x1b[47m';
-         break;
-
-
-         default:
-            // return Tools.ncc('White');
-            return '\x1b[37m';
-         break;
+         default: return '\x1b[37m'; // return white
       }
 
-      function _8bitColorFromRBG(rgb){
+      function _8bitColorFromRGB(rgb){
          const r = rgb.r > 127;
          const g = rgb.g > 127;
          const b = rgb.b > 127;
@@ -1833,9 +2515,6 @@ const Tools = {
          }
       }
    },
-
-
-
 
 
    /**return the index of element in which its value is the closest
@@ -1881,6 +2560,10 @@ const Tools = {
       return count;
    },
 
+   /**
+    * @typedef {Record<string, ParseArg_Arg> & { _unmatched: ParseArg_Arg[] }} ParseArgs
+    * @property {ParseArg_Arg[]} _unmatched Unmatched Arguments
+    */
    /**parse command line arguments
     * @example
     * let myParams = {
@@ -1893,7 +2576,7 @@ const Tools = {
          },
          age: {
             pattern: ['--age'],
-            type: 'int' // <- type can be 'int', 'float', 'string', 'choice', 'flag
+            type: 'int' // <- type can be 'int', 'let ', 'string', 'choice', 'flag
          },
          hasCar: {
             pattern: ['--hascar', '--car'],
@@ -1920,28 +2603,9 @@ const Tools = {
     * @param {string[]} args Node.js commandline args
     * @param {Object} params Paramiter rules object
     * @param {boolean} caseSensitive
+    * @returns {ParseArgs}
     */
    parseArgs(args, template, caseSensitive = false){
-      class Arg {
-         value;
-         index;
-         type;
-         constructor(value, index = -1, type) {
-            this.value = value;
-            this.type = type;
-            this.index = index;
-         }
-
-         valueOf() {
-            return this.value;
-         }
-
-         toString() {
-            return this.value.toString();
-         }
-      }
-
-
       let parsed = {
          _unmatched: []
       };
@@ -1963,7 +2627,7 @@ const Tools = {
             // Value Checking and Parsing
             if (template[pName]?.isFlag||template[pName]?.type == 'flag') {
                matched = true;
-               parsed[pName] = new Arg(true, i, 'flag');
+               parsed[pName] = new ParseArg_Arg(true, i, 'flag');
                continue;
             }
 
@@ -1981,12 +2645,12 @@ const Tools = {
                switch (template[pName]?.type) {
                   case 'int':
                      if (
-                        isNaN(parsed[pName] = new Arg(parseInt(args[++i]), i))
+                        isNaN(parsed[pName] = new ParseArg_Arg(parseInt(args[++i]), i))
                      ) throw new Error('typemissmatched');
                      break;
-                  case 'float':
+                  case 'let ':
                      if (
-                        isNaN(parsed[pName] = new Arg(parseFloat(args[++i]), i))
+                        isNaN(parsed[pName] = new ParseArg_Arg(parseFloat(args[++i]), i))
                      ) throw new Error('typemissmatched');
                      break;
                   case 'choice':
@@ -1999,10 +2663,10 @@ const Tools = {
                         throw new Error(`invalid value for '${args[i - 1]}' argument, requires any of these Choices: ${template[pName].choices}`);
                      }
 
-                     parsed[pName] = new Arg(args[i], i);
+                     parsed[pName] = new ParseArg_Arg(args[i], i);
                      break;
                   default:
-                     parsed[pName] = new Arg(args[++i], i);
+                     parsed[pName] = new ParseArg_Arg(args[++i], i);
                      break;
                }
 
@@ -2016,7 +2680,7 @@ const Tools = {
          }
 
          if(!matched)
-            parsed._unmatched.push(new Arg(args[i], i));
+            parsed._unmatched.push(new ParseArg_Arg(args[i], i));
       }
 
 
@@ -2027,12 +2691,12 @@ const Tools = {
       // fill default value
       for(const pName in template){
          if(template[pName]?.isFlag||template[pName]?.type == 'flag'){
-            if(!parsed[pName]) parsed[pName] = new Arg(false, -1, 'flag');
+            if(!parsed[pName]) parsed[pName] = new ParseArg_Arg(false, -1, 'flag');
             continue;
          }
 
          if(!parsed[pName]){
-            parsed[pName] = new Arg(
+            parsed[pName] = new ParseArg_Arg(
                template[pName]?.default?template[pName]?.default:null, -1, template[pName]?.type
             );
          }
@@ -2078,9 +2742,9 @@ const Tools = {
 
 
 
-
    /**parse configuration file in UTF-8 encoding to a Javascript Object
     * @param {string}ConfigString configuration file content
+    * @param {function(any, string, any): any} [JSONReviver=null] JSON reviver function, to parse JSON Object in side the config file
     * @returns {Object} configuration in Javascript Object
     * @example //in main file
     * const fs = require('fs');
@@ -2096,15 +2760,19 @@ const Tools = {
     * //in MyConfig.customextension file
     * # this is a comment :)
     *
-    * #here are my text
+    * # you can put a generic datatypes
     * myText = "Hello!!!"
+    *
+    * # or adding a JSON Object
+    * myObj = {
+    *    "somekey": "somevalue",
+    *    "nicearray": [1, 2, 3, 4, 5]
+    * }
     */
-   parseConfig(ConfigString){
-      var rows = Tools.cleanArr(ConfigString.trim().split('\n'), ['', '\s', '\r']);
-      var configObj = new Map();
-      const st = new Tools.SafeTrue();
-      const startAndEndsWithQ_reg = /^["'].*["']$/;
-      let indexOfSbeforeQ = 0;
+   parseConfig(ConfigString, JSONReviver = null){
+      let rows = Tools.cleanArr(ConfigString.trim().split('\n'), ['', '\s', '\r']);
+      let configObj = {};
+      let indexOfSBeforeQ = 0;
 
       let json_str = '', jsonVar_key;
       let inJson = false;
@@ -2138,7 +2806,7 @@ const Tools = {
          if(inJson){
             if(jsonEnd(rowIndex, rows)){
                inJson = false;
-               configObj.set(jsonVar_key, JSON.parse(json_str));
+               configObj[jsonVar_key] = JSON.parse(json_str, JSONReviver);
             }else{
                json_str += rows[rowIndex];
                continue;
@@ -2155,6 +2823,7 @@ const Tools = {
             [jsonVar_key, json_str] = eachPair;
          }
 
+         // check for invalid key
          if(eachPair[0].search(/[0-9]/) == 0)
             throw new Error(`Tools.parseConfig(): Key cannot starts with Numbers. at \`${eachRow}\``);
 
@@ -2164,50 +2833,64 @@ const Tools = {
          }
 
 
-         if(eachPair[1].match(/["']/g)?.length > 0){
-            let firstQ = eachPair[1].search(/["']/g);
-            // const secQ = eachPair[1].indexOf(/["']/g, firstQ+1);
-            const secQ = Tools.redexOf(eachPair[1], /["']/g, firstQ+1);
+         // try to parse value
+         const allQs = Tools.getMatchAllIndexes(eachPair[1].matchAll(/["']/g))
+            .filter((v, i, _allQs) => {
+               if(eachPair[1][v - 1] == '\\'){
+                  eachPair[1] = eachPair[1].slice(0, v - 1) + eachPair[1].slice(v);
 
-            let firstS = eachPair[1].search('#');
-            if(firstS != -1){
-               //let indexOfSbeforeQ;
-               while(st.True){
-                  let secS = eachPair[1].indexOf('#', firstS + 1);
-                  if(secS == -1&&firstS > secQ){
-                     indexOfSbeforeQ = firstS;
-                     break;
-                  }
-
-                  firstS = secS;
+                  // offset all indexes after this one, bc we just removed a '\' char
+                  for(let j = i + 1; j < _allQs.length; j++) _allQs[j]--;
+                  return false;
                }
+               return true;
+         });
+         const firstS = eachPair[1].search('#');
+         const firstQ = allQs[0];
+
+         if(firstQ != undefined&&(firstS == -1||firstQ < firstS)){
+            const secQ = allQs[1] == undefined? -1 :allQs[1];
+            const trailing = eachPair[1].slice(secQ + 2).trim();
+
+            if(trailing&&!trailing.startsWith('#')){
+               throw new Error(
+                  `Tools.parseConfig(): invalid syntax, unexpected charactor(s).\nat \`${eachRow}\`\n` +
+                  ''.padStart(secQ+10 + eachPair[0].length, ' ') + '^'
+               );
             }
+
+            if(secQ == -1){
+               throw new Error(
+                  `Tools.parseConfig(): invalid syntax, missing closing quote.\nat \`${eachRow}\`\n` +
+                  ' '.padStart(firstQ+7 + eachPair[0].length, ' ') + '^'
+               );
+            }
+            eachPair[1] = eachPair[1].slice(firstQ+1, secQ);
+
+         }else if(firstS != -1){
+            eachPair[1] = eachPair[1].substring(
+               0, eachPair[1].indexOf('#', indexOfSBeforeQ)
+            ).trim();
+
+            if(!eachPair[1]) throw new Error(`Tools.parseConfig(): invalid syntax, expected expresion after '='.  at \`${eachRow}\``);
          }
 
-         if(eachPair[1].includes('#')){
-            eachPair[1] = eachPair[1].substring(0, eachPair[1].indexOf('#', indexOfSbeforeQ)).trim();
-         }
-         if(startAndEndsWithQ_reg.test(eachPair[1]))
-            eachPair[1] = eachPair[1].slice(1, -1);
-         // }
-         // if(eachPair[1].startsWith('"')&&eachPair[1].endsWith('"')){
-         //    eachPair[1] = eachPair[1].slice(1, -1);
-         // }
-
-         configObj.set(eachPair[0], eachPair[1]);
+         configObj[eachPair[0]] = eachPair[1];
       }
-
-      configObj = Object.fromEntries(configObj);
 
       return configObj;
 
 
-
+      /**### A predicate function that check if the given row is the end of JSON config
+       * @param {number} i
+       * @param {string[]} rows
+       * @returns {boolean} true if the given row is the end of JSON config
+       */
       function jsonEnd(i, rows) {
          if(i == rows.length - 1) return true;
-         const b_closeIndexs = Tools.getMatchAllIndexs(rows[i].matchAll(/[}]]/g));
+         const b_closeIndexes = Tools.getMatchAllIndexes(rows[i].matchAll(/[}]]/g));
 
-         for(const eachIndex of b_closeIndexs){
+         for(const eachIndex of b_closeIndexes){
             const testBrack = rows[i].includes('}')? '}' :(rows[i].includes(']')? ']': false);
 
             if(
@@ -2242,10 +2925,117 @@ const Tools = {
       return value;
    },
 
+   /**a simple Progress tool that can be use to show the progress of a task
+    * @param {number}total total amount opration
+    * @param {string}template template of the progress message
+    * @example
+    * let inputFiles = fs.readdirSync(inputFolder, { withFileTypes: true });
+      let progess = new Progress('Converting tiles to PBM... (%prog%/%total%) [%spd%fps]', inputFiles.length);
+      for(let file of inputFiles){
+         const input = path.join(inputFolder, file.name);
+         const output = path.join(pbmFolder, file.name.replace(/\..+$/, '.pbm'));
+         await execProms(`magick "${input}" "${output}"`);
+         progess.update();
+      }
+    */
+   Progress: class Progress {
+      /**stdstream to write to or Terminal (from terminal.js)
+       * @type {any}
+       */
+      stdout = process.stdout;
+      progress = 0;
+      spd = 0;
+      lastCheck = null;
+      printInterval;
+      updateInterval;
+      total;
+      #tracker = 0;
+      #firstPrint = true;
+      #printFunction;
+
+      constructor(printTemplate, total = null, printInterval = 500, updateInterval = 100){
+         if(!printTemplate) throw new Error('printTemplate is required');
+
+         this.total = total;
+         this.printInterval = printInterval;
+         this.updateInterval = updateInterval;
+         this.setPrintTemplate(printTemplate);
+         this.lastCheck = Date.now();
+      }
+
+      /**update and show the progress
+       * @param {number}progress
+       */
+      update(progress = 1){
+         if(!this.#printFunction) return;
+
+         this.#tracker += progress;
+         this.progress += progress;
+         const lastCheckDelta = Date.now() - this.lastCheck;
+         if (lastCheckDelta > this.updateInterval&&this.#tracker > 4){
+            this.spd = (this.#tracker * this.updateInterval) / lastCheckDelta;
+            this.#tracker = 0;
+            this.lastCheck = Date.now();
+         }
+         if (this.lastPrint + this.printInterval > Date.now()) return;
+
+         this.lastPrint = Date.now();
+         if(!this.#firstPrint){
+            this.stdout.clearLine();
+            this.stdout.cursorTo(0);
+         }else this.#firstPrint = false;
+
+         if(!this.total){
+            this.#printFunction();
+            return;
+         }
+
+         this.#printFunction();
+      }
+      /**
+       * set the progress 100% then reset it
+       */
+      done(){
+         if(this.progress != this.total){
+            if(!this.#firstPrint){
+               this.stdout.clearLine();
+               this.stdout.cursorTo(0);
+            }
+            this.progress = this.total;
+            this.#printFunction();
+         }
+
+         this.stdout.write('\n');
+         this.reset();
+      }
+      /**
+       * reset the progress tracker
+       */
+      reset(){
+         this.progress = 0;
+         this.#tracker = 0;
+         this.spd = 0;
+         this.lastCheck = Date.now();
+         this.#firstPrint = true;
+      }
+
+      setPrintTemplate(template){
+         template = template.replace(/%total%/g, '${this.total}');
+         template = template.replace(/%spd%/g, '${this.spd.toFixed(1)}');
+         template = template.replace(/%prog%/g, '${this.progress}');
+
+         this.#printFunction = Function(
+            'this.stdout.write(' +
+               '`' + template + '`' +
+            ');'
+         ).bind(this);
+      }
+   },
 
 
 
-   /**a value snap function that tries to snap `X` to `originValue`;
+   /**### value snap function that tries to snap `X` to `originValue`
+    *
     * **return** `originValue` if delta of `X` to `originValue` is smaller than
     * `maxOffset` otherwise return `X`
     *
@@ -2258,6 +3048,19 @@ const Tools = {
       if(X < (originValue + maxOffset)&&X > (originValue - maxOffset)){
          return originValue;
       }else return X;
+   },
+
+
+
+
+   /**
+    * pick a random item from an array
+    * @param {any[]} arr
+    * @returns {any}
+    */
+   randomPick(arr){
+      if(arr.length <= 1) return arr[0];
+      return arr[Math.floor(Math.random() * arr.length)];
    },
 
 
@@ -2314,10 +3117,31 @@ const Tools = {
       /**match non-word chars similar to \W
        * but accept multiple languages
        */
-      Seperators: new RegExp(/[\s-_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g)
+      Seperators: /[\s-_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g,
+      /**similar to `Tools.REGEXP.Seperators` but it's more suitable for
+       * text wrapping
+      */
+      SoftWrapSeperators: /(?<!\[)[\s,.\]})]/g,
+      /**similar to `Tools.REGEXP.SoftWrapSeperators` but it's more sensitive
+      */
+      HardWrapSeperators: /(?<!\[)[\s-_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g,
    },
 
-
+   /**
+    * resolve the Environment Variable in the given string
+    *
+    * default Environment Variable format to CMD (`%ENV_NAME%`)
+    * @param {string} str
+    * @param {RegExp} envRegex CMD Environment Variable format
+    */
+   resolveNodeEnv(str, envRegex = /%\w+%/g){
+      return str.replace(envRegex, (env) => {
+         const envName = env.slice(1, -1);
+         if(process.env[envName] == undefined)
+            return env;
+         return process.env[envName];
+      });
+   },
 
 
    SafeTrue: class SafeTrue{
@@ -2428,19 +3252,18 @@ const Tools = {
             if(Tools.includesWord(w, strList[i], false)){
                if(TF_IDFMaps&&TF_IDFMaps[i]?.has(w)){
                   tfidf_s += w.length * (TF_IDFMaps[i].get(w).TF_IDF) * 2.9;
-                  score += w.length * (TF_IDFMaps[i].get(w).TF_IDF) * 2.9; // <- TF_IDF weight (1.6)
+                  score += w.length * (TF_IDFMaps[i].get(w).TF_IDF) * 2.9; // <- TF_IDF weight (2.9)
                }else{
-                  console.log(w);
                   word_s += w.length;
                   score += w.length; // <- match word weight (1)
                }
             } else if(strList[i].includes(w)){
                includes_s += w.length * .3;
-               score += w.length * .3; // <- includes() weight (0.6)
+               score += w.length * .3; // <- includes() weight (0.3)
             }
 
-            lcs_s += Tools.DataScienceKit.LCS_of(w, strList[i]).length * 0.4;
-            score += Tools.DataScienceKit.LCS_of(w, strList[i]).length * 0.4; // <- LCS weight (1.8)
+            lcs_s += Tools.DataScienceKit.LCSLength_of(w, strList[i]) * 0.4;
+            score += Tools.DataScienceKit.LCSLength_of(w, strList[i]) * 0.4; // <- LCS weight (0.4)
          }
 
          // bestMatchs.push(new Match(null, score, i));
@@ -2461,10 +3284,6 @@ const Tools = {
 
       return bestMatchs.slice(0, maxResult);
    },
-
-
-
-
 
 
 
@@ -2552,7 +3371,7 @@ const Tools = {
       const leftoverAmu = str.length - (str.length - length) - 3;
       switch(dropLocation){
          default:
-            if(onNodeJS) process?.emitWarning(`'${dropLocation}' is not a valid location type.`);
+            if(onJSRuntime) process?.emitWarning(`'${dropLocation}' is not a valid location type.`);
             else throw new Error(`'${dropLocation}' is not a valid location type.`);
          case 'mid':
             const haft_loa = (leftoverAmu >> 1);
@@ -2565,7 +3384,7 @@ const Tools = {
    },
 
 
-   /**limit string lenght, similar to strClamp but doesn't pad to the target length
+   /**limit string length, similar to strClamp but doesn't pad to the target length
     * @param {string} str
     * @param {number} limit max string length allowed
     * @param {string} dropLocation 'mid', 'start' or 'end' determine location in which the string would
@@ -2578,7 +3397,7 @@ const Tools = {
       const leftoverAmu = str.length - (str.length - limit) - 3;
       switch(dropLocation){
          default:
-            if(onNodeJS) process?.emitWarning(`'${dropLocation}' is not a valid location type.`);
+            if(onJSRuntime) process?.emitWarning(`'${dropLocation}' is not a valid location type.`);
             else throw new Error(`'${dropLocation}' is not a valid location type.`);
          case 'mid':
             const haft_loa = (leftoverAmu >> 1);
@@ -2607,7 +3426,7 @@ const Tools = {
 
 
 
-   /**surround the target string to the spacified length using the given `filler` char
+   /**surround the target string to the specified length using the given `filler` char
     * @param {string} filler char to fill the `target`
     * @param {number} length the final length
     * @param {string} target
@@ -2619,6 +3438,292 @@ const Tools = {
    },
 
 
+   /**
+    * @typedef {Object} strWrapOptions
+    * @property {string|number} [indent=''] the string to put in front of each line
+    *
+    * if `number` is given, will put WhiteSpace with that length instead
+    * @property {string|number} [firstIndent=''] the string to put in front of first line
+    *
+    * if `number` is given, will put WhiteSpace with that length instead
+    * @property {'strict'|'softboundery'} [mode='softboundery'] wrap mode
+    *
+    * **Strict**: wrap the string to the given length,
+    * while each line is equal or lessthan the given max length
+    *
+    * **SoftBoundary** (default): similar to **Strict** but with some tolerance
+    */
+   /**wrap string to the given max line length
+    * @param {string} str string to wrap
+    * @param {number} maxLineLength max length of each line, if mode is set to `'softboundery'`
+    * each line can be longer than this value
+    * @param {strWrapOptions} [options={}]
+    */
+   strWrap(str, maxLineLength, options = {}){
+      if(!str) return '';
+
+      let content = '';
+      const SoftSep_reg = Tools.REGEXP.SoftWrapSeperators;
+      const HardSep_reg = Tools.REGEXP.HardWrapSeperators;
+
+      const innerBound = maxLineLength * 0.67;
+      str = str.toString().split('\n');
+      if(typeof options.firstIndent == 'number')
+         options.firstIndent = ''.padEnd(options.firstIndent, ' ');
+      if(typeof options.indent == 'number')
+         options.indent = ''.padEnd(options.indent, ' ');
+
+      if(options.firstIndent) content += options.firstIndent;
+      for(let eachLine of str){
+         while(eachLine.length > maxLineLength){
+            const indexesOfSep = Tools.getMatchAllIndexes(eachLine.matchAll(SoftSep_reg))
+               .filter(v => v >= innerBound);
+            let indexOfSep = indexesOfSep[0] ?? -1;
+
+            if(options.indent){
+               if(options.firstIndent||options.firstIndent == '') options.firstIndent = null;
+               else content += options.indent;
+            }
+
+            if(options.mode == 'softboundery'){
+               if(indexOfSep == -1){
+                  const indexesOfHardSep = Tools.getMatchAllIndexes(eachLine.matchAll(HardSep_reg))
+                     .filter(v => v >= innerBound);
+                  indexOfSep = getSepIndex(indexesOfHardSep, 0) ?? maxLineLength;
+               }else indexOfSep = getSepIndex(indexesOfSep, 0);
+
+            }else indexOfSep = ((indexOfSep > maxLineLength)||(indexOfSep == -1)? maxLineLength: indexOfSep);
+            indexOfSep++;
+
+            content += eachLine.substring(0, indexOfSep).concat('\n');
+            eachLine = eachLine.substring(indexOfSep);
+         }
+
+         if(options.indent){
+            if(options.firstIndent||options.firstIndent == '') options.firstIndent = null;
+            else content += options.indent;
+         }
+         content += eachLine.concat('\n');
+      }
+      return content;
+
+      function getSepIndex(sepIndexes, index){
+         if(!sepIndexes[index + 1]) return sepIndexes[index];
+         if(sepIndexes[index + 1] - sepIndexes[index] > 1) return sepIndexes[index];
+
+         return getSepIndex(sepIndexes, index + 1);
+      }
+   },
+
+   /**check if the terminal/console supports color text
+    *
+    * from npm package: [supports-color](https://www.npmjs.com/package/supports-color)
+    * @returns {number} 0: no color support, 1: 8bit color support, 2: 256 color support, 3: 16bit color support
+    */
+   supportsColor(stream = process?.stdout) {
+      if (Tools.CheckCache.forceColor === false) {
+         return 0;
+      }
+
+      if (Tools.argvHasFlag('color=16m') ||
+         Tools.argvHasFlag('color=full') ||
+         Tools.argvHasFlag('color=truecolor')) {
+         return 3;
+      }
+
+      if (Tools.argvHasFlag('color=256')) {
+         return 2;
+      }
+
+      if (stream && !stream.isTTY && Tools.CheckCache.forceColor !== true) {
+         return 0;
+      }
+
+      const min = Tools.CheckCache.forceColor ? 1 : 0;
+
+      if (process.platform === 'win32') {
+         if(!_modules.os) _modules.os = require('os');
+         // Node.js 7.5.0 is the first version of Node.js to include a patch to
+         // libuv that enables 256 color output on Windows. Anything earlier and it
+         // won't work. However, here we target Node.js 8 at minimum as it is an LTS
+         // release, and Node.js 7 is not. Windows 10 build 10586 is the first Windows
+         // release that supports 256 colors. Windows 10 build 14931 is the first release
+         // that supports 16m/TrueColor.
+         const osRelease = _modules.os.release().split('.');
+         if (
+            Number(process.versions.node.split('.')[0]) >= 8 &&
+            Number(osRelease[0]) >= 10 &&
+            Number(osRelease[2]) >= 10586
+         ) {
+            return Number(osRelease[2]) >= 14931 ? 3 : 2;
+         }
+
+         return 1;
+      }
+
+      const { env } = process;
+
+      if ('CI' in env) {
+         if (['TRAVIS', 'CIRCLECI', 'APPVEYOR', 'GITLAB_CI'].some(sign => sign in env) || env.CI_NAME === 'codeship') {
+            return 1;
+         }
+
+         return min;
+      }
+
+      if ('TEAMCITY_VERSION' in env) {
+         return /^(9\.(0*[1-9]\d*)\.|\d{2,}\.)/.test(env.TEAMCITY_VERSION) ? 1 : 0;
+      }
+
+      if (env.COLORTERM === 'truecolor') {
+         return 3;
+      }
+
+      if ('TERM_PROGRAM' in env) {
+         const version = parseInt((env.TERM_PROGRAM_VERSION || '').split('.')[0], 10);
+
+         switch (env.TERM_PROGRAM) {
+            case 'iTerm.app':
+               return version >= 3 ? 3 : 2;
+            case 'Apple_Terminal':
+               return 2;
+            // No default
+         }
+      }
+
+      if (/-256(color)?$/i.test(env.TERM)) {
+         return 2;
+      }
+
+      if (/^screen|^xterm|^vt100|^vt220|^rxvt|color|ansi|cygwin|linux/i.test(env.TERM)) {
+         return 1;
+      }
+
+      if ('COLORTERM' in env) {
+         return 1;
+      }
+
+      if (env.TERM === 'dumb') {
+         return min;
+      }
+
+      return min;
+   },
+
+
+   /**check if the terminal/console supports Hyperlink
+    *
+    * from npm package: [supports-hyperlinks](https://www.npmjs.com/package/supports-hyperlinks)
+    */
+   supportsHyperlink(stream = process?.stdout, test = false) {
+      if(test) console.log(`Terminal Support Hyperlink Test: (result of last check is the test result)`);
+
+      if(test) console.log(`1. has process.env: ${!!process.env}`);
+      const { env } = process;
+      if(!env) return false;
+
+      if(test) console.log(
+         `2. force hyperlink: ${!!env.FORCE_HYPERLINK&&!(env.FORCE_HYPERLINK.length > 0 && parseInt(env.FORCE_HYPERLINK, 10) === 0)}`
+      );
+      if ('FORCE_HYPERLINK' in env) {
+         return !(env.FORCE_HYPERLINK.length > 0 && parseInt(env.FORCE_HYPERLINK, 10) === 0);
+      }
+
+      if(test) console.log(`3. hyperlink disable: ${(Tools.argvHasFlag('no-hyperlink') || Tools.argvHasFlag('no-hyperlinks') || Tools.argvHasFlag('hyperlink=false') || Tools.argvHasFlag('hyperlink=never'))}`);
+      if (Tools.argvHasFlag('no-hyperlink') || Tools.argvHasFlag('no-hyperlinks') || Tools.argvHasFlag('hyperlink=false') || Tools.argvHasFlag('hyperlink=never')) {
+         return false;
+      }
+
+      if(test) console.log(`4. has hyperlink enable: ${Tools.argvHasFlag('hyperlink=true') || Tools.argvHasFlag('hyperlink=always')}`);
+      if (Tools.argvHasFlag('hyperlink=true') || Tools.argvHasFlag('hyperlink=always')) {
+         return true;
+      }
+
+      if(test) console.log(`5. ran on Netlify: ${('NETLIFY' in env)}`);
+      // Netlify does not run a TTY, it does not need `supportsColor` check
+      if ('NETLIFY' in env) {
+         return true;
+      }
+
+      if(test) console.log(`6. supports color: ${Tools.CheckCache.supportsColor > 0}`);
+      if(Tools.CheckCache.supportsColor > 0){
+         return true;
+      }
+
+      if(test) console.log(`7. in TTY stream: ${!(stream && !stream.isTTY)}`);
+      if (stream && !stream.isTTY) {
+         return false;
+      }
+
+      if(test) console.log(`8. platform is win32: ${process.platform === 'win32'}`);
+      if (process.platform === 'win32') {
+         return false;
+      }
+
+      if(test) console.log(`9. is CI: ${('CI' in env)}`);
+      if ('CI' in env) {
+         return false;
+      }
+
+      if(test) console.log(`10. no TEAMCITY_VERSION: ${!('TEAMCITY_VERSION' in env)}`);
+      if ('TEAMCITY_VERSION' in env) {
+         return false;
+      }
+
+      if(test) console.log(`11. valid TERM_PROGRAM: (multiple check)`);
+      if ('TERM_PROGRAM' in env) {
+         const version = parseVersion(env.TERM_PROGRAM_VERSION);
+
+         switch (env.TERM_PROGRAM) {
+            case 'iTerm.app':
+               if (version.major === 3) {
+                  return version.minor >= 1;
+               }
+
+               return version.major > 3;
+            case 'WezTerm':
+               return version.major >= 20200620;
+            case 'vscode':
+               return version.major > 1 || version.major === 1 && version.minor >= 72;
+            // No default
+         }
+      }
+
+      if(test) console.log(`11. valid VTE_VERSION: (multiple check)`);
+      if ('VTE_VERSION' in env) {
+         // 0.50.0 was supposed to support hyperlinks, but throws a segfault
+         if (env.VTE_VERSION === '0.50.0') {
+            return false;
+         }
+
+         const version = parseVersion(env.VTE_VERSION);
+         return version.major > 0 || version.minor >= 50;
+      }
+
+
+      if(test) console.log(`12. Final: failed`);
+      return false;
+
+
+      function parseVersion(versionString) {
+         if (/^\d{3,4}$/.test(versionString)) {
+            // Env var doesn't always use dots. example: 4601 => 46.1.0
+            const m = /(\d{1,2})(\d{2})/.exec(versionString);
+            return {
+               major: 0,
+               minor: parseInt(m[1], 10),
+               patch: parseInt(m[2], 10)
+            };
+         }
+
+         const versions = (versionString || '').split('.').map(n => parseInt(n, 10));
+         return {
+            major: versions[0],
+            minor: versions[1],
+            patch: versions[2]
+         };
+      }
+   },
 
 
    /**check if the given index of string `str` is surrounded by `surroundStr`
@@ -2668,7 +3773,6 @@ const Tools = {
    },
 
 
-
    Timer: class Timer {
       /**time remaining in the clock
        * @type {number}
@@ -2680,7 +3784,6 @@ const Tools = {
       resolution;
       isRunning = false;
       maxTime;
-
       #res;
       #interval;
       #lastCheck = 0;
@@ -2766,7 +3869,7 @@ const Tools = {
       /**@callback OnceEndCallback
        * @returns {void}
        */
-      /**call a callback funtion once Timer finish counting
+      /**call a callback function once Timer finish counting
        * @param {OnceEndCallback} callback
        */
       onceEnd(callback){
@@ -2804,7 +3907,6 @@ const Tools = {
          default: return number + 'th';
       }
    },
-
 
    /**shorten the given number to keep it easy to the eyes
     * @param {number}number
@@ -2857,452 +3959,12 @@ const Tools = {
    },
 
 
-
-
-   WebKit: {
-      /**get childs that contains the given class in the parent element
-       * @param {string} cName
-       * @param {HTMLElement} parent
-       */
-      getChildWithClassName(cName, parent){
-         const childs = [...parent.children];
-         let targetchilds = [];
-         for(let child of childs){
-            if(child.classList.contains(cName))
-               targetchilds.push(child);
-         }
-         return targetchilds;
-      },
-
-
-
-      /**callback when user clicked outside the given element
-       * @param {HTMLElement} element
-       * @param {Function} callback
-       * @returns {Function} use this to clear event listener
-       */
-      onClickOutside(element, callback) {
-         const outsideClickListener = event => {
-            if (!element.contains(event.target)) {
-               callback();
-            }
-         }
-
-         document.addEventListener('click', outsideClickListener);
-         return outsideClickListener;
-      },
-
-      /**callback when user clicked outside the given element
-       * **Similar to `onClickOutside()` but only invoke ONCE!**
-       * @param {HTMLElement} element
-       * @param {Function} callback
-       */
-      onceClickOutside(element, callback) {
-         const outsideClickListener = event => {
-            if (!element.contains(event.target)) {
-               callback();
-               document.removeEventListener('click', outsideClickListener);
-            }
-         }
-
-         document.addEventListener('click', outsideClickListener);
-      },
-
-      /**clear event listener for `onClickOutside()` and `hideOnClickOutside()`
-       * @example
-       * let listener = onClickOutside(elem, doStuff);
-       * function doStuff(){
-       *    // . . .
-       *    clearClickOutside(listener);
-       * }
-       * @param {Function} listener
-       */
-      clearClickOutside(listener) {
-         document.removeEventListener('click', listener);
-      },
-
-
-
-      /**make the element automatically hide itself when
-       * user click outside this element
-       * @param {HTMLElement} element
-       * @param {string|HTMLElement} elemToHide
-       * @returns {Function} use this to clear event listener
-       */
-      hideOnClickOutside(element, elemToHide = 'this') {
-         const targetElem = elemToHide === 'this'?element:elemToHide;
-
-         const outsideClickListener = event => {
-            if (!element.contains(event.target) && Tools.WebKit.isVisible(targetElem)) { // or use: event.target.closest(selector) === null
-               targetElem.style.display = 'none';
-            }
-         }
-
-         document.addEventListener('click', outsideClickListener);
-         return outsideClickListener;
-      },
-
-
-
-      /**set all selected elements that matched the `specifier` as visible
-       * and hide others the that doesn't match
-       * @param {string} selector querySelector for 'selected elements'
-       * @param {{id: string, class: string}} specifier ID and or ClassName any selected element that
-       * match this specifier will be visible
-       * @param {string} displayType Element style.display
-       */
-      hideOtherElements(selector, specifier, displayType = null){
-         const elements = document.querySelectorAll(selector);
-         const hasId = !!specifier.id;
-         const hasClass = !!specifier.class;
-
-         for(const elem of [...elements]){
-            // pls ignore this mess T^T
-            const validId = hasId? elem.id == specifier.id:false;
-            const validClass = hasClass? isClassMatched(elem.className):false;
-
-            if((validClass&&(!hasId || validId)) || validId&&!hasClass){
-               if(displayType) elem.style.display = displayType;
-            }else elem.style.display = 'none';
-         }
-
-         function isClassMatched(className){
-            if(specifier.class.includes(' ')){
-               const eClassList = className.split(' ');
-               if(eClassList.length <= 0) return false;
-
-               for(const sClass of specifier.class.split(' ')){
-                  if(!eClassList.includes(sClass)) return false;
-               }
-               return true;
-            }
-
-            return className == specifier.class;
-         }
-      },
-
-
-
-
-
-
-      /**hides all element selected by the `selector`
-       * this function hide elements by set its display type to 'none'
-       * @param {string} selector querySelector
-       */
-      hideAllElements(selector){
-         const elements = document.querySelectorAll(selector);
-         for(const e of [...elements]){
-            e.style.display = 'none';
-         }
-      },
-
-
-      /**check if the given coordinates is inside
-       * the element Rect or not
-       * @param {DOMRect} elemRect
-       * @param {number} x
-       * @param {number} y
-       */
-      isPosInside(x, y, elemRect){
-         return (
-            x > elemRect.left&&x < elemRect.right&&
-            y > elemRect.top&&y < elemRect.bottom
-         );
-      },
-
-
-
-      /**predicates whether any of the selected element can be seen
-       * @param {string} selector querySelector
-       */
-      isSelectedVisible(selector){
-         const elements = document.querySelectorAll(selector);
-         for(const e of [...elements]){
-            if(Tools.WebKit.isVisible(e)) return true;
-         }
-         return false;
-      },
-
-
-
-      /**predicates whether the element is currenly visible or not
-       * (source (2018-03-11): https://github.com/jquery/jquery/blob/master/src/css/hiddenVisibleSelectors.js)
-       * @param {HTMLElement} elem
-       */
-      isVisible: elem =>
-         !!elem && !!( elem.offsetWidth || elem.offsetHeight || elem.getClientRects().length),
-
-
-
-      KeyBind: class KeyBind {
-         /**raw keybinding, each keys separated by '+'
-          */
-         rawBinding;
-         /**normalized keybinding stored in Set
-          * each keys are normalize so that it can be compared directly
-          * with `KeyboardEvent.Key`
-          */
-         keys;
-         /**
-          * @param {string} strKeyBind raw keybinding, each keys seperated by '+'
-          */
-         constructor(strKeyBind){
-            this.rawBinding = strKeyBind;
-            this.keys = this.#normalize(strKeyBind);
-         }
-
-         /**
-          * @param {string} strKeyBind raw keybinding, each keys seperated by '+'
-          */
-         static key(strKeyBind){
-            return new KeyBind(strKeyBind);
-         }
-
-         /**
-          * @param {string} strKeyBind
-          * @returns {Set<string>} normalized keybind
-          */
-         #normalize(strKeyBind){
-            const keys = Tools.cleanArr(strKeyBind.split('+'));
-            let hasShift = false;
-            return new Set(keys.map((v, i, a) => {
-               v = v.trim();
-               switch(v.toLowerCase()){
-                  case 'ctrl':
-                     return 'Control';
-                  case 'shift':
-                     if(!hasShift) hasShift = true;
-                     return 'Shift';
-                  default:
-                     if(v.length == 1){
-                        return hasShift? v.toUpperCase(): v.toLowerCase();
-                     }
-                     return v;
-               }
-            }));
-         }
-      },
-
-
-
-
-      Keyboard: class Keyboard {
-         /**map every keys that's being pressed
-          * @type {Set<string>}
-          */
-         activeKeys;
-         /**
-          * @type {Map<KeyBind, Function>}
-          */
-         catchList;
-         debugMode = false;
-         constructor(){
-            this.activeKeys = new Set();
-            this.catchList = new Map();
-         }
-         /**Keep track of what key is currently being pressed
-          * **this function should be called everytime `keydown` and `keyup`
-          * Events trigger**
-          * @param {KeyboardEvent} ev
-          */
-         handleKeyPress = (ev) => {
-            if(ev.type == 'keydown'){
-               this.activeKeys.add(ev.key);
-               if(this.debugMode) console.log(this.activeKeys);
-
-               for(const [keybind, callback] of this.catchList){
-                  if(this.test(keybind)){
-                     callback();
-                     ev.preventDefault();
-                  }
-               }
-            }else if(ev.type == 'keyup') this.activeKeys.delete(ev.key);
-            else throw new Error('wrong Event type!');
-         }
-
-         /**test if the given keybind is being pressed by user
-          * @param {KeyBind} keybind
-          */
-         test(keybind){
-            for(const k of keybind.keys){
-               if(!this.activeKeys.has(k)) return false;
-            }
-            return true;
-         }
-
-         /**
-          * listen for the given keybind, `preventDefault()`
-          * and call a callback function
-          * @param {Function} callback
-          * @param {KeyBind} keybind
-          */
-         catch(keybind, callback){
-            this.catchList.set(keybind, callback);
-         }
-
-         /**remove catch listener
-          * @param {KeyBind} keybind
-          */
-         unCatch(keybind){
-            this.catchList.delete(keybind);
-         }
-
-      },
-
-
-
-
-      /**HTMLElement handler for textarea 'keydown' event
-       * this prevent Tab key from select other element
-       * and make Tab works like it should in most text editors
-       * @param {KeyboardEvent} event
-       * @param {HTMLTextAreaElement} _this element that cause this `KeyboardEvent`
-       */
-      handleTextarea_TabKeyPressed(event, _this){
-         if (event.key != 'Tab') return;
-         event.preventDefault();
-         const start = _this.selectionStart;
-         const end = _this.selectionEnd;
-
-         // if user didn't select any text, just place caret somewhere without selection
-         if (start == end) {
-            // set textarea value to: text before caret + tab + text after caret
-            _this.value = _this.value.substring(0, start) +
-               "\t" + _this.value.substring(end);
-
-            // put caret at the right position again
-            _this.selectionStart = _this.selectionEnd = start + 1;
-            return;
-         }
-
-
-         let selectedText = _this.value.substring(start, end + 1);
-         let addedLength = selectedText.length;
-         selectedText = selectedText.replace(/\n/g, '\n\t');
-
-         addedLength = selectedText.length - addedLength;
-         /**
-          * if there are no '\n' replace all content in `selectedText`
-          * else remove trailing '\t' and it to the front
-          *
-          * (v no '\n' here, no indent added)
-          * |some text to add
-          * |tab indent
-          * |         (^ extra '\n')
-          */
-         if (!addedLength) selectedText = '\t';
-         else {
-            if (selectedText.endsWith('\t'))
-               selectedText = selectedText.slice(0, selectedText.length - 1);
-            selectedText = '\t' + selectedText;
-         }
-
-         _this.value = _this.value.substring(0, start) +
-            selectedText + _this.value.substring(end);
-
-         _this.selectionStart = start;
-         _this.selectionEnd = end + addedLength;
-      },
-
-      /**reload all CSS in the document
-       */
-      reloadCSS(){
-         const links = document.getElementsByTagName("link");
-         for (const cl in links){
-            const link = links[cl];
-            if (link.rel === "stylesheet") link.href += "";
-         }
-      },
-
-
-      /**Function used to determine the order of the elements.
-       * It is expected to return a negative value
-       * if the first argument is less than the second argument,
-       * zero if they're equal, and a positive value otherwise.
-       * If omitted, the elements are sorted in ascending, ASCII character order,
-       * judging from the `textContent` value.
-       * @callback CompareFunction
-       * @param {HTMLElement} elemA
-       * @param {HTMLElement} elemB
-       * @returns {number}
-       */
-
-      /**Sort elements inplace, this function does not modify the given Array/Collection
-      * but the actual orders of those elements in the `document`
-      * @param {HTMLCollection|HTMLElement[]} elements an array of Element or HTMLCollection
-      * @param {CompareFunction} compareFn
-      * Function used to determine the order of the elements.
-      * It is expected to return a negative value
-      * if the first argument is less than the second argument,
-      * zero if they're equal, and a positive value otherwise.
-      * If omitted, the elements are sorted in ascending, ASCII character order,
-      * judging from the `textContent` value.
-      */
-      sortElements(
-         elements,
-         compareFn = (a, b) => a.textContent.localeCompare(b.textContent)
-      ){
-         if(elements instanceof HTMLCollection) elements = [...elements];
-         const parent = elements[0].parentElement;
-
-         quickSort(0, elements.length);
-
-         function quickSort(start, end){
-            if(end === start) return;
-            const pivot = get3Median(start, end);
-            let pivotIndex = elements.findIndex(e => e.isSameNode(pivot));
-
-            for(let i = start; i < end; i++){
-               if(elements[i].isSameNode(pivot)) continue;
-
-               if(compareFn(elements[i], pivot) <= 0){
-                  if(i < pivotIndex) continue;
-                  pivot.insertAdjacentElement('beforebegin', elements[i]);
-               }
-               else{
-                  if(i > pivotIndex) continue;
-                  pivot.insertAdjacentElement('afterend', elements[i]);
-               }
-            }
-
-            const sorted = [...parent.children];
-            pivotIndex = sorted.findIndex(e => e.isSameNode(pivot));
-
-            for(let i = start; i < end; i++) elements[i] = sorted[i];
-            quickSort(start, pivotIndex);
-            quickSort(pivotIndex + 1, end);
-         }
-
-
-         function get3Median(start, end){
-            const first = elements[start];
-            const mid = elements[(end - start) >> 1];
-            const last = elements[end - 1];
-            let medElem, belowMed;
-
-            // find the potential median: the greater value of two is the potential median
-            if(compareFn(first, mid) < 0){ // first is lessthan mid
-               medElem = mid;
-               belowMed = first;
-            }else{
-               medElem = first;
-               belowMed = mid;
-            }
-
-            // find the real median
-            if(compareFn(medElem, last) < 0);// potential median is less then last: potential median is median
-            else if(compareFn(last, belowMed) < 0) medElem = belowMed;
-            else medElem = last;
-            return medElem;
-         }
-      }
-   }
 }
 
 
-/////////////////////   exstension   ///////////////////////
-//"exstension" function of Object `Number` that returns length of digits of Number
+
+/////////////////////   extension   ///////////////////////
+//"extension" function of Object `Number` that returns length of digits of Number
 Number.prototype.length = function length(){
    return (this+'').replace(/[.e]/ig, '').length;
 };
@@ -3311,7 +3973,5 @@ Number.prototype.length = function length(){
 String.prototype.redexOf = Tools.redexOf;
 
 
-
-
-if(onNodeJS) module.exports = Tools; //for Node.js
-else window.to = Tools; //for Web Javascript
+if(typeof module !== 'undefined') module.exports = Tools;
+if(typeof window !== 'undefined') window._tools = Tools;
