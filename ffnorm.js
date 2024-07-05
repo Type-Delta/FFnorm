@@ -33,7 +33,7 @@ const {
 } = require('./Tools');
 
 
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
    targetLUFS: {
@@ -158,7 +158,10 @@ ${ncc('magenta')}Usage:
 
 
 const args = parseArgs(nodeArgs, ParamTemplate);
-if(!args.output.value) args.output.value = nodeArgs.at(-1);
+if(!args.output.value){
+   args.output.value = nodeArgs.at(-1);
+   args._unmatched.pop(); // remove the last argument (we know it's the output path)
+}
 
 
 if(args.showVersion.value){
@@ -200,16 +203,26 @@ const isSupportedFile = (n) => {
 
 
 
-
 if(!args.input.value){
-   console.log(`${ncc('red')}Input file/folder is required!${ncc()}`);
-   process.exit(1);
+   // a shorthand for specifying input (scan mode only)
+   // input can be specified without the '-i' option
+   if(args.mode_scan.value&&args.output.value){
+      args.input.value = args.output.value;
+
+   }else{
+      console.log(`${ncc('red')}Input file/folder is required!${ncc()}`);
+      process.exit(1);
+   }
 }
 
 if(!fs.existsSync(args.input.value)){
    console.log(`${ncc('red')}input path doesn\'t exist. typed something wrong?${ncc()}`);
    process.exit(1);
 }
+
+
+const inputStats = fs.statSync(args.input.value);
+
 
 if(args.mode_scan.value){
    if(args.mode_norm.value)
@@ -227,7 +240,7 @@ if(args.mode_scan.value){
    if(!args.mode_norm.value)
       console.log(`${ncc('yellow')}No Mode selected, default to ${ncc('magenta')}Normalize${ncc()}`);
 
-   if(args._unmatched.length&&args._unmatched[0].index != nodeArgs.length - 1){
+   if(args._unmatched.length){
       console.log(`${ncc('red')}Unknown argument: '${args._unmatched[0].value}' at index ${args._unmatched[0].index + ncc()}`);
       process.exit(1);
    }
@@ -237,17 +250,47 @@ if(args.mode_scan.value){
       process.exit(1);
    }
 
-   if(path.normalize(args.input.value) == path.normalize(args.output.value)){
-      console.log(`${ncc('red')}input folder can\'t be the same Output!\nplease change output file/folder location.${ncc()}`);
-      process.exit(1);
-   }
+   {
+      /**@type {fs.Stats|null} */
+      let outputStats = null;
+      let outputDir;
 
-   if(fileTypeOf(args.output.value) == 'media'){
-      if(fileTypeOf(args.input.value) != 'media'){
-         console.log(`${ncc('red')}input path must be a File if Output path is a File${ncc()}`);
+      if(fs.existsSync(args.output.value)){
+         outputStats = fs.statSync(args.output.value);
+      }else{
+         outputIsFile = isSupportedFile(args.output.value);
+      }
+
+      if(outputStats?.isFile() ?? outputIsFile){
+         if(inputStats.isDirectory()){
+            console.log(`${ncc('red')}input path must be a File if Output path is a File${ncc()}`);
+            process.exit(1);
+         }
+         outputIsFile = true;
+      }
+      else { // output is a folder, may or may not exist
+         outputDir = args.output.value;
+
+         if(inputStats.isFile()){
+            args.output.value = path.join(args.output.value, path.basename(args.input.value));
+            outputIsFile = true;
+         }
+      }
+
+      if(isPathEqual(args.input.value, args.output.value)){
+         console.log(`${ncc('red')}input folder can\'t be the same Output!\nplease change output file/folder location.${ncc()}`);
          process.exit(1);
       }
-      outputIsFile = true;
+
+      if(outputDir&&outputStats === null){ // output folder doesn't exist
+         try{
+            if(!fs.existsSync(outputDir))
+               fs.mkdirSync(outputDir, { recursive: true });
+         }catch(err){
+            console.log(`${ncc('red')}Cannot create folder ${args.output}\n${ncc('dim')}${err}${ncc()}`);
+            process.exit(1);
+         }
+      }
    }
 
    normMode();
@@ -271,7 +314,7 @@ async function scanMode(){
    });
 
    // filter only supported files
-   const fileNames = (outputIsFile? [path.basename(args.input.value)]: fs.readdirSync(
+   const fileNames = (inputStats.isFile()? [path.basename(args.input.value)]: fs.readdirSync(
       args.input.value,
       { encoding: 'utf-8' }
    ).filter(n => isSupportedFile(n)));
@@ -306,7 +349,7 @@ async function scanMode(){
             break;
       }
       console.log(
-         `${ncc()}${i + 1}.\t` + strClamp(fileInfo[i].name, nameDispSize) + ' ' + color + strClamp(`${fileInfo[i].loudness}LUFS`, 11, 'end') + strClamp(`${(delta).toFixed(1)}LUFS`, 11, 'end') +ncc('cyan')+ (fileInfo[i].bitrate??null?`${(fileInfo[i].bitrate / 1000).toFixed(0)}kbps`:`${ncc('red')}Unknown`)
+         `${ncc()}${i + 1}.\t` + strClamp(fileInfo[i].name, nameDispSize, 'mid', 2) + ' ' + color + strClamp(`${fileInfo[i].loudness}LUFS`, 11, 'end', -1) + strClamp(`${(delta).toFixed(1)}LUFS`, 11, 'end', -1) +ncc('cyan')+ (fileInfo[i].bitrate??null?`${(fileInfo[i].bitrate / 1000).toFixed(0)}kbps`:`${ncc('red')}Unknown`)
       );
    }
 
@@ -316,17 +359,6 @@ async function scanMode(){
 
 
 async function normMode(){
-   if(!outputIsFile){
-      try{
-         if(!fs.existsSync(args.output.value))
-            fs.mkdirSync(args.output.value, { recursive: true });
-      }catch(err){
-         console.log(`${ncc('red')}Cannot create folder ${args.output}\n${ncc('dim')}${err}${ncc()}`);
-         process.exit(1);
-      }
-   }
-
-
    eventEmitter.on('scanloop', batchCount => {
       stats.operatedCount += batchCount;
       print(batchCount);
@@ -337,7 +369,7 @@ async function normMode(){
    });
 
    // filter only supported files
-   const fileNames = (outputIsFile? [path.basename(args.input.value)]: fs.readdirSync(
+   const fileNames = (inputStats.isFile()? [path.basename(args.input.value)]: fs.readdirSync(
       args.input.value,
       { encoding: 'utf-8' }
    ).filter(n => isSupportedFile(n)));
@@ -356,7 +388,7 @@ async function normMode(){
    await normalizeFiles(args.input.value, fileInfo);
 
    console.log(
-      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget (LUFS): ${ncc('cyan')+(args.targetLUFS)+ncc()}\nMax Offest (LUFS): ${ncc('cyan')+(args.LUFSMaxOffset)+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
+      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget: ${ncc('cyan')+(args.targetLUFS)+'LUFS'+ncc()}\nMax Offest: ${ncc('cyan')+'+-'+args.LUFSMaxOffset+'LUFS'+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
    );
 }
 
@@ -382,7 +414,7 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
       while(activeThreads < args.scanThread){
          if(!(fileNames[i])) break;
 
-         if(!outputIsFile)
+         if(inputStats.isDirectory())
             proms.push(getloudness(path.join(folder,  fileNames[i]), i));
          else proms.push(getloudness(folder, i));
 
@@ -432,7 +464,7 @@ async function scanFilesloudness(folder, fileNames, fillter = false){
  */
 async function scanFilesBitrate(folder, fileObjArr){
    console.log(`Scanning Files Bitrate...`);
-   console.time('\nBitrate Scanning took');
+   console.time('Bitrate Scanning took');
    operation = 'scan';
 
    let bitrateRes = [];
@@ -442,7 +474,7 @@ async function scanFilesBitrate(folder, fileObjArr){
       for( ; y < args.scanThread; y++){
          if(!(fileObjArr[i + y])) break;
 
-         if(!outputIsFile)
+         if(inputStats.isDirectory())
             proms.push(getAudioBitrate(path.join(folder, fileObjArr[i + y].name)));
          else proms.push(getAudioBitrate(folder));
       }
@@ -452,7 +484,7 @@ async function scanFilesBitrate(folder, fileObjArr){
    }
 
    fileObjArr.map((v, i) => v.bitrate = bitrateRes[i]);
-   console.timeEnd('\nBitrate Scanning took');
+   console.timeEnd('Bitrate Scanning took');
    return fileObjArr;
 }
 
@@ -561,7 +593,7 @@ function getloudness(filePath, i){
  */
 function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1){
    return new Promise(async (resolve, reject) => {
-      const tags = await NodeID3.read(outputIsFile? inputFolder:path.join(inputFolder, fileName));
+      const tags = await NodeID3.read(inputStats.isFile()? inputFolder:path.join(inputFolder, fileName));
       const useID3v2 = propertiesCount(tags) > 1;
 
       if(outputIsFile){
@@ -569,21 +601,8 @@ function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1
             `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy "${outputFolder}"`,
             async (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
-               if(useID3v2&&!err){
-                  let retCount = 0;
-                  let ret = false;
-                  do{
-                     try{
-                        await NodeID3.update(tags, outputFolder);
-                        ret = false;
-                     }catch(err){
-                        if(err.code == 'EBUSY'){
-                           ret = true;
-                           sleep(1000);
-                        }
-                     }
-                  }while(ret&&++retCount < 3);
-               }
+
+               if(useID3v2&&!err) await restoreID3Tags();
                eventEmitter.emit('norm', 1);
                resolve();
             }
@@ -594,25 +613,29 @@ function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1
             `ffmpeg -hide_banner -y -i "${path.join(inputFolder, fileName)}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy  "${path.join(outputFolder, fileName)}"`,
             async (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
-               if(useID3v2&&!err){
-                  let retCount = 0;
-                  let ret = false;
-                  do{
-                     try{
-                        await NodeID3.update(tags, path.join(outputFolder, fileName));
-                        ret = false;
-                     }catch(err){
-                        if(err.code == 'EBUSY'){
-                           ret = true;
-                           sleep(1000);
-                        }
-                     }
-                  }while(ret&&++retCount < 3);
-               }
+
+               if(useID3v2&&!err) await restoreID3Tags();
                eventEmitter.emit('norm', 1);
                resolve();
             }
          );
+      }
+
+
+      async function restoreID3Tags(){
+         let retCount = 0;
+         let ret = false;
+         do{
+            try{
+               await NodeID3.update(tags, outputFolder);
+               ret = false;
+            }catch(err){
+               if(err.code == 'EBUSY'){ // the file is busy, wait for a second
+                  ret = true;
+                  sleep(1000);
+               }
+            }
+         }while(ret&&++retCount < 3);
       }
    });
 }
@@ -649,3 +672,9 @@ function print(batchCount){
    }
 }
 
+
+
+
+function isPathEqual(path1, path2){
+   return path.normalize(path1) == path.normalize(path2);
+}

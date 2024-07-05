@@ -1,11 +1,12 @@
 //////////// Tools ////////////
 /**tools for Javascript
- * @version 2.12.4
+ * @version 2.12.9
  * for Node.js >= 16.x.x
  * @changes
- * - added Prograss class
- * - added spacial bit-wise operators
- * - added hyperLink() function
+ * - updated: JSDoc now uses @template
+ * - deprecated: objectMap() (ops, it's not needed)
+ * - added: objectMap() and remap()
+ * - added padStart(), padEnd() and strJustify()
  */
 "use strict";
 const onJSRuntime = (typeof window === 'undefined'||typeof process !== 'undefined');
@@ -13,9 +14,20 @@ var _modules = {
    dgram: null,
    worker_threads: null,
    os: null,
+   fs: null,
    /**3rd party Module*/
    mathjs: null,
 };
+
+/**
+ * Created by Wiktor Stribiżew, Sep 9, 2021
+ * Matching all 4590 emoji characters defined in the Emoji Keyboard/Display Test Data for UTR #51 (Version: 13.1).
+ *
+ * @from [stribizhev/Emojis](https://github.com/stribizhev/Emojis/tree/main)
+ */
+const EMOJI_MATCHER_TOKEN = "[#*0-9]\\uFE0F?\\u20E3|©\\uFE0F?|[®\\u203C\\u2049\\u2122\\u2139\\u2194-\\u2199\\u21A9\\u21AA]\\uFE0F?|[\\u231A\\u231B]|[\\u2328\\u23CF]\\uFE0F?|[\\u23E9-\\u23EC]|[\\u23ED-\\u23EF]\\uFE0F?|\\u23F0|[\\u23F1\\u23F2]\\uFE0F?|\\u23F3|[\\u23F8-\\u23FA\\u24C2\\u25AA\\u25AB\\u25B6\\u25C0\\u25FB\\u25FC]\\uFE0F?|[\\u25FD\\u25FE]|[\\u2600-\\u2604\\u260E\\u2611]\\uFE0F?|[\\u2614\\u2615]|\\u2618\\uFE0F?|\\u261D(?:\\uD83C[\\uDFFB-\\uDFFF]|\\uFE0F)?|[\\u2620\\u2622\\u2623\\u2626\\u262A\\u262E\\u262F\\u2638-\\u263A\\u2640\\u2642]\\uFE0F?|[\\u2648-\\u2653]|[\\u265F\\u2660\\u2663\\u2665\\u2666\\u2668\\u267B\\u267E]\\uFE0F?|\\u267F|\\u2692\\uFE0F?|\\u2693|[\\u2694-\\u2697\\u2699\\u269B\\u269C\\u26A0]\\uFE0F?|\\u26A1|\\u26A7\\uFE0F?|[\\u26AA\\u26AB]|[\\u26B0\\u26B1]\\uFE0F?|[\\u26BD\\u26BE\\u26C4\\u26C5]|\\u26C8\\uFE0F?|\\u26CE|[\\u26CF\\u26D1\\u26D3]\\uFE0F?|\\u26D4|\\u26E9\\uFE0F?|\\u26EA|[\\u26F0\\u26F1]\\uFE0F?|[\\u26F2\\u26F3]|\\u26F4\\uFE0F?|\\u26F5|[\\u26F7\\u26F8]\\uFE0F?|\\u26F9(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?|\\uFE0F(?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\u26FA\\u26FD]|\\u2702\\uFE0F?|\\u2705|[\\u2708\\u2709]\\uFE0F?|[\\u270A\\u270B](?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\u270C\\u270D](?:\\uD83C[\\uDFFB-\\uDFFF]|\\uFE0F)?|\\u270F\\uFE0F?|[\\u2712\\u2714\\u2716\\u271D\\u2721]\\uFE0F?|\\u2728|[\\u2733\\u2734\\u2744\\u2747]\\uFE0F?|[\\u274C\\u274E\\u2753-\\u2755\\u2757]|\\u2763\\uFE0F?|\\u2764(?:\\u200D(?:\\uD83D\\uDD25|\\uD83E\\uDE79)|\\uFE0F(?:\\u200D(?:\\uD83D\\uDD25|\\uD83E\\uDE79))?)?|[\\u2795-\\u2797]|\\u27A1\\uFE0F?|[\\u27B0\\u27BF]|[\\u2934\\u2935\\u2B05-\\u2B07]\\uFE0F?|[\\u2B1B\\u2B1C\\u2B50\\u2B55]|[\\u3030\\u303D\\u3297\\u3299]\\uFE0F?|\\uD83C(?:[\\uDC04\\uDCCF]|[\\uDD70\\uDD71\\uDD7E\\uDD7F]\\uFE0F?|[\\uDD8E\\uDD91-\\uDD9A]|\\uDDE6\\uD83C[\\uDDE8-\\uDDEC\\uDDEE\\uDDF1\\uDDF2\\uDDF4\\uDDF6-\\uDDFA\\uDDFC\\uDDFD\\uDDFF]|\\uDDE7\\uD83C[\\uDDE6\\uDDE7\\uDDE9-\\uDDEF\\uDDF1-\\uDDF4\\uDDF6-\\uDDF9\\uDDFB\\uDDFC\\uDDFE\\uDDFF]|\\uDDE8\\uD83C[\\uDDE6\\uDDE8\\uDDE9\\uDDEB-\\uDDEE\\uDDF0-\\uDDF5\\uDDF7\\uDDFA-\\uDDFF]|\\uDDE9\\uD83C[\\uDDEA\\uDDEC\\uDDEF\\uDDF0\\uDDF2\\uDDF4\\uDDFF]|\\uDDEA\\uD83C[\\uDDE6\\uDDE8\\uDDEA\\uDDEC\\uDDED\\uDDF7-\\uDDFA]|\\uDDEB\\uD83C[\\uDDEE-\\uDDF0\\uDDF2\\uDDF4\\uDDF7]|\\uDDEC\\uD83C[\\uDDE6\\uDDE7\\uDDE9-\\uDDEE\\uDDF1-\\uDDF3\\uDDF5-\\uDDFA\\uDDFC\\uDDFE]|\\uDDED\\uD83C[\\uDDF0\\uDDF2\\uDDF3\\uDDF7\\uDDF9\\uDDFA]|\\uDDEE\\uD83C[\\uDDE8-\\uDDEA\\uDDF1-\\uDDF4\\uDDF6-\\uDDF9]|\\uDDEF\\uD83C[\\uDDEA\\uDDF2\\uDDF4\\uDDF5]|\\uDDF0\\uD83C[\\uDDEA\\uDDEC-\\uDDEE\\uDDF2\\uDDF3\\uDDF5\\uDDF7\\uDDFC\\uDDFE\\uDDFF]|\\uDDF1\\uD83C[\\uDDE6-\\uDDE8\\uDDEE\\uDDF0\\uDDF7-\\uDDFB\\uDDFE]|\\uDDF2\\uD83C[\\uDDE6\\uDDE8-\\uDDED\\uDDF0-\\uDDFF]|\\uDDF3\\uD83C[\\uDDE6\\uDDE8\\uDDEA-\\uDDEC\\uDDEE\\uDDF1\\uDDF4\\uDDF5\\uDDF7\\uDDFA\\uDDFF]|\\uDDF4\\uD83C\\uDDF2|\\uDDF5\\uD83C[\\uDDE6\\uDDEA-\\uDDED\\uDDF0-\\uDDF3\\uDDF7-\\uDDF9\\uDDFC\\uDDFE]|\\uDDF6\\uD83C\\uDDE6|\\uDDF7\\uD83C[\\uDDEA\\uDDF4\\uDDF8\\uDDFA\\uDDFC]|\\uDDF8\\uD83C[\\uDDE6-\\uDDEA\\uDDEC-\\uDDF4\\uDDF7-\\uDDF9\\uDDFB\\uDDFD-\\uDDFF]|\\uDDF9\\uD83C[\\uDDE6\\uDDE8\\uDDE9\\uDDEB-\\uDDED\\uDDEF-\\uDDF4\\uDDF7\\uDDF9\\uDDFB\\uDDFC\\uDDFF]|\\uDDFA\\uD83C[\\uDDE6\\uDDEC\\uDDF2\\uDDF3\\uDDF8\\uDDFE\\uDDFF]|\\uDDFB\\uD83C[\\uDDE6\\uDDE8\\uDDEA\\uDDEC\\uDDEE\\uDDF3\\uDDFA]|\\uDDFC\\uD83C[\\uDDEB\\uDDF8]|\\uDDFD\\uD83C\\uDDF0|\\uDDFE\\uD83C[\\uDDEA\\uDDF9]|\\uDDFF\\uD83C[\\uDDE6\\uDDF2\\uDDFC]|\\uDE01|\\uDE02\\uFE0F?|[\\uDE1A\\uDE2F\\uDE32-\\uDE36]|\\uDE37\\uFE0F?|[\\uDE38-\\uDE3A\\uDE50\\uDE51\\uDF00-\\uDF20]|[\\uDF21\\uDF24-\\uDF2C]\\uFE0F?|[\\uDF2D-\\uDF35]|\\uDF36\\uFE0F?|[\\uDF37-\\uDF7C]|\\uDF7D\\uFE0F?|[\\uDF7E-\\uDF84]|\\uDF85(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDF86-\\uDF93]|[\\uDF96\\uDF97\\uDF99-\\uDF9B\\uDF9E\\uDF9F]\\uFE0F?|[\\uDFA0-\\uDFC1]|\\uDFC2(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDFC3\\uDFC4](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDFC5\\uDFC6]|\\uDFC7(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDFC8\\uDFC9]|\\uDFCA(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDFCB\\uDFCC](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?|\\uFE0F(?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDFCD\\uDFCE]\\uFE0F?|[\\uDFCF-\\uDFD3]|[\\uDFD4-\\uDFDF]\\uFE0F?|[\\uDFE0-\\uDFF0]|\\uDFF3(?:\\u200D(?:\\u26A7\\uFE0F?|\\uD83C\\uDF08)|\\uFE0F(?:\\u200D(?:\\u26A7\\uFE0F?|\\uD83C\\uDF08))?)?|\\uDFF4(?:\\u200D\\u2620\\uFE0F?|\\uDB40\\uDC67\\uDB40\\uDC62\\uDB40(?:\\uDC65\\uDB40\\uDC6E\\uDB40\\uDC67|\\uDC73\\uDB40\\uDC63\\uDB40\\uDC74|\\uDC77\\uDB40\\uDC6C\\uDB40\\uDC73)\\uDB40\\uDC7F)?|[\\uDFF5\\uDFF7]\\uFE0F?|[\\uDFF8-\\uDFFF])|\\uD83D(?:[\\uDC00-\\uDC07]|\\uDC08(?:\\u200D\\u2B1B)?|[\\uDC09-\\uDC14]|\\uDC15(?:\\u200D\\uD83E\\uDDBA)?|[\\uDC16-\\uDC3A]|\\uDC3B(?:\\u200D\\u2744\\uFE0F?)?|[\\uDC3C-\\uDC3E]|\\uDC3F\\uFE0F?|\\uDC40|\\uDC41(?:\\u200D\\uD83D\\uDDE8\\uFE0F?|\\uFE0F(?:\\u200D\\uD83D\\uDDE8\\uFE0F?)?)?|[\\uDC42\\uDC43](?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDC44\\uDC45]|[\\uDC46-\\uDC50](?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDC51-\\uDC65]|[\\uDC66\\uDC67](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDC68(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?\\uDC68|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D(?:\\uDC66(?:\\u200D\\uD83D\\uDC66)?|\\uDC67(?:\\u200D\\uD83D[\\uDC66\\uDC67])?|[\\uDC68\\uDC69]\\u200D\\uD83D(?:\\uDC66(?:\\u200D\\uD83D\\uDC66)?|\\uDC67(?:\\u200D\\uD83D[\\uDC66\\uDC67])?)|[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92])|\\uD83E[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])|\\uD83C(?:\\uDFFB(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?\\uDC68\\uD83C[\\uDFFB-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D\\uDC68\\uD83C[\\uDFFC-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFC(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?\\uDC68\\uD83C[\\uDFFB-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D\\uDC68\\uD83C[\\uDFFB\\uDFFD-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFD(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?\\uDC68\\uD83C[\\uDFFB-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D\\uDC68\\uD83C[\\uDFFB\\uDFFC\\uDFFE\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFE(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?\\uDC68\\uD83C[\\uDFFB-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D\\uDC68\\uD83C[\\uDFFB-\\uDFFD\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFF(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?\\uDC68\\uD83C[\\uDFFB-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D\\uDC68\\uD83C[\\uDFFB-\\uDFFE]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?))?|\\uDC69(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:\\uDC8B\\u200D\\uD83D)?[\\uDC68\\uDC69]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D(?:\\uDC66(?:\\u200D\\uD83D\\uDC66)?|\\uDC67(?:\\u200D\\uD83D[\\uDC66\\uDC67])?|\\uDC69\\u200D\\uD83D(?:\\uDC66(?:\\u200D\\uD83D\\uDC66)?|\\uDC67(?:\\u200D\\uD83D[\\uDC66\\uDC67])?)|[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92])|\\uD83E[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])|\\uD83C(?:\\uDFFB(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF]|\\uDC8B\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF])|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFC-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFC(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF]|\\uDC8B\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF])|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB\\uDFFD-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFD(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF]|\\uDC8B\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF])|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB\\uDFFC\\uDFFE\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFE(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF]|\\uDC8B\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF])|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFD\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFF(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D\\uD83D(?:[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF]|\\uDC8B\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFF])|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83D[\\uDC68\\uDC69]\\uD83C[\\uDFFB-\\uDFFE]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?))?|\\uDC6A|[\\uDC6B-\\uDC6D](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDC6E(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDC6F(?:\\u200D[\\u2640\\u2642]\\uFE0F?)?|[\\uDC70\\uDC71](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDC72(?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDC73(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDC74-\\uDC76](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDC77(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDC78(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDC79-\\uDC7B]|\\uDC7C(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDC7D-\\uDC80]|[\\uDC81\\uDC82](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDC83(?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDC84|\\uDC85(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDC86\\uDC87](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDC88-\\uDC8E]|\\uDC8F(?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDC90|\\uDC91(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDC92-\\uDCA9]|\\uDCAA(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDCAB-\\uDCFC]|\\uDCFD\\uFE0F?|[\\uDCFF-\\uDD3D]|[\\uDD49\\uDD4A]\\uFE0F?|[\\uDD4B-\\uDD4E\\uDD50-\\uDD67]|[\\uDD6F\\uDD70\\uDD73]\\uFE0F?|\\uDD74(?:\\uD83C[\\uDFFB-\\uDFFF]|\\uFE0F)?|\\uDD75(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?|\\uFE0F(?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDD76-\\uDD79]\\uFE0F?|\\uDD7A(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDD87\\uDD8A-\\uDD8D]\\uFE0F?|\\uDD90(?:\\uD83C[\\uDFFB-\\uDFFF]|\\uFE0F)?|[\\uDD95\\uDD96](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDDA4|[\\uDDA5\\uDDA8\\uDDB1\\uDDB2\\uDDBC\\uDDC2-\\uDDC4\\uDDD1-\\uDDD3\\uDDDC-\\uDDDE\\uDDE1\\uDDE3\\uDDE8\\uDDEF\\uDDF3\\uDDFA]\\uFE0F?|[\\uDDFB-\\uDE2D]|\\uDE2E(?:\\u200D\\uD83D\\uDCA8)?|[\\uDE2F-\\uDE34]|\\uDE35(?:\\u200D\\uD83D\\uDCAB)?|\\uDE36(?:\\u200D\\uD83C\\uDF2B\\uFE0F?)?|[\\uDE37-\\uDE44]|[\\uDE45-\\uDE47](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDE48-\\uDE4A]|\\uDE4B(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDE4C(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDE4D\\uDE4E](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDE4F(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDE80-\\uDEA2]|\\uDEA3(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDEA4-\\uDEB3]|[\\uDEB4-\\uDEB6](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDEB7-\\uDEBF]|\\uDEC0(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDEC1-\\uDEC5]|\\uDECB\\uFE0F?|\\uDECC(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDECD-\\uDECF]\\uFE0F?|[\\uDED0-\\uDED2\\uDED5-\\uDED7]|[\\uDEE0-\\uDEE5\\uDEE9]\\uFE0F?|[\\uDEEB\\uDEEC]|[\\uDEF0\\uDEF3]\\uFE0F?|[\\uDEF4-\\uDEFC\\uDFE0-\\uDFEB])|\\uD83E(?:\\uDD0C(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDD0D\\uDD0E]|\\uDD0F(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDD10-\\uDD17]|[\\uDD18-\\uDD1C](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDD1D|[\\uDD1E\\uDD1F](?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDD20-\\uDD25]|\\uDD26(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDD27-\\uDD2F]|[\\uDD30-\\uDD34](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDD35(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDD36(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDD37-\\uDD39](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDD3A|\\uDD3C(?:\\u200D[\\u2640\\u2642]\\uFE0F?)?|[\\uDD3D\\uDD3E](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDD3F-\\uDD45\\uDD47-\\uDD76]|\\uDD77(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDD78\\uDD7A-\\uDDB4]|[\\uDDB5\\uDDB6](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDDB7|[\\uDDB8\\uDDB9](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDDBA|\\uDDBB(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDDBC-\\uDDCB]|[\\uDDCD-\\uDDCF](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDDD0|\\uDDD1(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF84\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83E\\uDDD1|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD]))|\\uD83C(?:\\uDFFB(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D(?:\\uD83D\\uDC8B\\u200D)?\\uD83E\\uDDD1\\uD83C[\\uDFFC-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF84\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFC(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D(?:\\uD83D\\uDC8B\\u200D)?\\uD83E\\uDDD1\\uD83C[\\uDFFB\\uDFFD-\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF84\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFD(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D(?:\\uD83D\\uDC8B\\u200D)?\\uD83E\\uDDD1\\uD83C[\\uDFFB\\uDFFC\\uDFFE\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF84\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFE(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D(?:\\uD83D\\uDC8B\\u200D)?\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFD\\uDFFF]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF84\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?|\\uDFFF(?:\\u200D(?:[\\u2695\\u2696\\u2708]\\uFE0F?|\\u2764\\uFE0F?\\u200D(?:\\uD83D\\uDC8B\\u200D)?\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFE]|\\uD83C[\\uDF3E\\uDF73\\uDF7C\\uDF84\\uDF93\\uDFA4\\uDFA8\\uDFEB\\uDFED]|\\uD83D[\\uDCBB\\uDCBC\\uDD27\\uDD2C\\uDE80\\uDE92]|\\uD83E(?:\\uDD1D\\u200D\\uD83E\\uDDD1\\uD83C[\\uDFFB-\\uDFFF]|[\\uDDAF-\\uDDB3\\uDDBC\\uDDBD])))?))?|[\\uDDD2\\uDDD3](?:\\uD83C[\\uDFFB-\\uDFFF])?|\\uDDD4(?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|\\uDDD5(?:\\uD83C[\\uDFFB-\\uDFFF])?|[\\uDDD6-\\uDDDD](?:\\u200D[\\u2640\\u2642]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?)?|[\\uDDDE\\uDDDF](?:\\u200D[\\u2640\\u2642]\\uFE0F?)?|[\\uDDE0-\\uDDFF\\uDE70-\\uDE74\\uDE78-\\uDE7A\\uDE80-\\uDE86\\uDE90-\\uDEA8\\uDEB0-\\uDEB6\\uDEC0-\\uDEC2\\uDED0-\\uDED6])";
+
+
 
 /**for `Tools.getMatchAllResult()`
  */
@@ -265,27 +277,27 @@ const Tools = {
    // $ ts-node foo.ts -f --unicorn --foo=bar -- --rainbow
 
    // foo.ts
-   import hasFlag = require('has-flag');
+   import { argvHasFlag } from 'Tools';
 
-   hasFlag('unicorn');
+   argvHasFlag('unicorn');
    //=> true
 
-   hasFlag('--unicorn');
+   argvHasFlag('--unicorn');
    //=> true
 
-   hasFlag('f');
+   argvHasFlag('f');
    //=> true
 
-   hasFlag('-f');
+   argvHasFlag('-f');
    //=> true
 
-   hasFlag('foo=bar');
+   argvHasFlag('foo=bar');
    //=> true
 
-   hasFlag('foo');
+   argvHasFlag('foo');
    //=> false
 
-   hasFlag('rainbow');
+   argvHasFlag('rainbow');
    //=> false
    ```
    */
@@ -300,7 +312,7 @@ const Tools = {
 
 
    /**similar to `sleep()` but this won't block the synchronous thread
-    * @param {number}milliseconds how long to pause in milliseconds
+    * @param {number}milliseconds how long the sleep last in milliseconds
     */
    async asyncSleep(milliseconds){
       return new Promise((resolve, reject) => {
@@ -437,42 +449,17 @@ const Tools = {
 
 
 
-   bucketSort(NumArr, bucketCount){
-      const max = Math.max(...NumArr);
-      const min = Math.min(...NumArr);
-      const buckRange = (max - min) / bucketCount;
-
-
-      //create empty Array the size of `bucketCount` for containing all buckets
-      let buckContainer = [];
-      while(buckContainer.length < bucketCount) buckContainer.push([]);
-
-
-      //fill each bucket with numbers in `NumArr` in with accending order bucket
-      for(let i = 0; i < NumArr.length; i++){
-         let buckIndex = (Math.ceil((NumArr[i] - min) / buckRange) || 1) - 1;
-         buckContainer[buckIndex].push(NumArr[i]);
-      }
-
-      NumArr = [];
-      //sort each bucket
-      for(let i = 0; i < buckContainer.length; i++){
-         buckContainer[i].sort((a, b) => a - b);
-         NumArr  = NumArr.concat(buckContainer[i]);
-      }
-   },
-
-
    /**get type of the character at the given index
     * @param {number} index
     * @param {string} str
     */
    charTypeAt(index, str){
       const table = Tools.CONSTS.UNICODES_RANGE_TABLE;
-      const st = new Tools.SafeTrue((table.length >> 1) + 1);
       const code = str.charCodeAt(index);
 
-      for(let i = table.length >> 1; i >= 0&&i < table.length&&st.True; ){
+      for(let i = table.length >> 1, opt = 0; i >= 0&&i < table.length; opt++){
+         if(opt > (table.length >> 1) + 1) break;
+
          if(table[i].to instanceof Array){
             for(let j = 0; j < table[i].to.length; j++){
                if(code >= table[i].from[j]&&code <= table[i].to[j]){
@@ -545,42 +532,45 @@ const Tools = {
 
 
    /**clean array
-    * @param {any[]} Arr array to clean
-    * @param {any|any[]} itemToClean items to wipe off, optional(if None is provide,
+    * @template T
+    * @param {T[]} arr array to clean
+    * @param {T|T[]} itemToClean items to wipe off, optional(if None is provide,
     * will remove empty string, Array, Object),
     * can be array EX: ['0', '', 'g'] (those are Black-Listed items)
     * @returns new cleaned array
     */
-   cleanArr(Arr, itemToClean = null){
+   cleanArr(arr, itemToClean = null){
       if(itemToClean && itemToClean instanceof Array){
-         return Arr.filter(function (itemInArr) {
+         return arr.filter(function (itemInArr) {
             return !itemToClean.includes(itemInArr);
          });
       }
 
       if(itemToClean){
-         return Arr.filter(function (itemInArr) {
+         return arr.filter(function (itemInArr) {
             return itemInArr !== itemToClean;
          });
       }
 
-      return Arr.filter(itemInArr =>
+      return arr.filter(itemInArr =>
          (itemInArr !== ''&&itemInArr !== '\r'&&!Tools.isEmptyArray(itemInArr)&&!Tools.isEmptyObject(itemInArr))
       );
    },
 
 
-
+   /**
+    * remove terminal controll code from the string (e.g. color, hyperlink)
+    */
    cleanString(string){
-      return string.replace(/\[[0-9]+m|\\x1b\[[0-9]+m/g, '');
+      return string.normalize().replace(Tools.REGEXP.ANSICode, '');
    },
 
 
 
 
    CONSTS: Object.freeze({
-      /**characters range table
-       *
+      /**
+       * # Unicode range table
        * ## Sources
        * - japanese: [localizingjapan](https://www.localizingjapan.com/blog/2012/01/20/regular-expressions-for-japanese-text/)
        */
@@ -602,6 +592,12 @@ const Tools = {
             regex: /[\u2E80-\u2FD5\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u3000-\u303f\u3041-\u3096\u30a0-\u30ff]/g,
             from: [0x2e80, 0x3400, 0x4e00, 0xf900, 0x3000, 0x3041, 0x30a0],
             to: [0x2fd5, 0x4db5, 0x9fcb, 0xfa6a, 0x303f, 0x3096, 0x30ff]
+         }),
+         Object.freeze({
+            type: 'generic.cn.full',
+            regex: /[\u4e00-\u9fff]/g,
+            from: 0x4e00,
+            to: 0x9fff
          }),
          Object.freeze({
             type: 'generic.jp.half',
@@ -639,7 +635,9 @@ const Tools = {
    DataScienceKit: {
       /**calculate how many times each unique elements
        * appears in the given array
-       * @param {any[]|string} arr
+       * @template T
+       * @param {T[]|string} arr
+       * @returns {Map<T, number>} frequency of each unique elements
        */
       frequencyOf(arr){
          const uniqueElems = [...new Set(arr)];
@@ -665,11 +663,11 @@ const Tools = {
        * where each value can be compare with each other;
        * this is useful for determining how close those
        * Arrays/string are in terms of equality
-       * @param {string|any[]} arrA
-       * @param {string|any[]} arrB
-       * @param {function(any|string, any|string): boolean}
-       * comparator function that return `true` when the given values
-       * is considered Equal
+       * @template T_valueA, T_valueB
+       * @param {string|T_valueA[]} arrA
+       * @param {string|T_valueB[]} arrB
+       * @param {(a: T_valueA|string, b: T_valueB|string) => boolean} comparator function that return `true` when the given values is considered Equal
+       * @returns {T_valueA[]} Longest Common Subsequence from the given arrays
        */
       LCS_of(arrA, arrB, comparator = (a, b) => a === b){
          if(!(arrA?.length&&arrB?.length)) return [];
@@ -677,8 +675,8 @@ const Tools = {
          /**3d matrix:
           * row: representative of strA
           * col: representative of strB
-          * depth: [value, arrawDirection]
-          * arrawRotation: (1: up (row--), 2: left (col--), 3: up left (row--, col--))
+          * depth: [value, arrowDirection]
+          * arrowRotation: (1: up (row--), 2: left (col--), 3: up left (row--, col--))
           * @type {number[][][]}
           */
          let lcsMatrix = [];
@@ -749,25 +747,53 @@ const Tools = {
        * this is a bit faster than `LCS_of()` since it doesn't have to find
        * the LCS string itself
        *
-       * from [GeeksForGeeks](https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/)
-       * @param {string|any[]} arrA
-       * @param {string|any[]} arrB
-       * @param {function(any|string, any|string): boolean}
-       * comparator function that return `true` when the given values
+       * @template T_valueA, T_valueB
+       * @param {string|T_valueA[]} arrA
+       * @param {string|T_valueB[]} arrB
+       * @param {(a: T_valueA|string, b: T_valueB|string) => boolean} comparator function that return `true` when the given values
        * is considered Equal
        * @returns {number} length of the LCS string
        */
       LCSLength_of(arrA, arrB, comparator = (a, b) => a === b){
-         return lcsLength(arrA, arrB, arrA.length, arrB.length);
+         if(!(arrA?.length&&arrB?.length)) return [];
 
-         function lcsLength(a,  b, aIndex, bIndex){
-            if (aIndex == 0 || bIndex == 0) return 0;
-            if(comparator(a[aIndex-1], b[bIndex-1]))
-               return 1 + lcsLength(a, b, aIndex-1, bIndex-1);
-            else
-               return Math.max(
-               lcsLength(a, b, aIndex, bIndex-1), lcsLength(a, b, aIndex-1, bIndex)
-            );
+         /**3d matrix:
+          * row: representative of strA
+          * col: representative of strB
+          * depth: [value, arrowDirection]
+          * arrowRotation: (1: up (row--), 2: left (col--), 3: up left (row--, col--))
+          * @type {number[][][]}
+          */
+         let lcsMatrix = [];
+         const matrixWidth = arrB.length;
+         const matrixHeight = arrA.length;
+         while(lcsMatrix.length < matrixHeight) lcsMatrix.push(
+            new Array(matrixWidth)
+         );
+
+         // fill matrix
+         for(let row = 0; row < lcsMatrix.length; row++){
+            for(let col = 0; col < lcsMatrix[row].length; col++){
+               if(comparator(arrA[row], arrB[col])){
+                  const upLeft_v = getValue(row - 1, col - 1);
+                  lcsMatrix[row][col] = [upLeft_v + 1, 3];
+                  continue;
+               }
+
+               const left_v = getValue(row, col - 1);
+               const up_v = getValue(row - 1, col);
+               if(left_v > up_v)
+                  lcsMatrix[row][col] = [left_v, 2];
+               else lcsMatrix[row][col] = [up_v, 1];
+            }
+         }
+
+
+         return lcsMatrix[matrixHeight - 1][matrixWidth - 1][0];
+
+         function getValue(row, col){
+            if(row < 0||col < 0) return 0;
+            else return lcsMatrix[row][col][0];
          }
       },
 
@@ -875,8 +901,6 @@ const Tools = {
                wordCount = tfidf_maps[row].size;
             }
 
-            // console.log(wordCount);
-
             for(let col = 0; col < wordCount; col++){
                if(newlyAdded&&!tfidf_maps[row].has(documents[addedRow][col])){
                   tfidf_maps[row].set(
@@ -896,7 +920,6 @@ const Tools = {
             }
          }
 
-         // console.log(idf.size);
 
          const allUniqueWords = [...idf.keys()];
          for(let i = 0; i < allUniqueWords.length; i++){
@@ -930,16 +953,16 @@ const Tools = {
       /**## **Wagner & Fischer Algorithm**
        *
        * calculate the **Levenshtein distance** of two string or array
-       * telling how many operations needed to transform one A string to B
+       * telling how many operations needed to transform A string to B
        *
-       * @param {string|any[]} arrA
-       * @param {string|any[]} arrB
-       * @param {function(any|string, any|string): boolean}
-       * comparator function that return `true` when the given values
+       * @template T_valueA, T_valueB
+       * @param {string|T_valueA[]} arrA
+       * @param {string|T_valueB[]} arrB
+       * @param {(a: T_valueA|string, b: T_valueB|string) => boolean} comparator function that return `true` when the given values
        * is considered Equal
        * @returns {WagnerResult} result of the calculation
        */
-      wagnerFischer_of(arrA, arrB, commparator = (a, b) => a === b){
+      wagnerFischer_of(arrA, arrB, comparator = (a, b) => a === b){
          let matrix = [];
          let row, col;
          // fill the first row and column of the matrix
@@ -948,7 +971,7 @@ const Tools = {
 
          for(row = 1; row <= arrA.length; row++){
             for(col = 1; col <= arrB.length; col++){
-               if(commparator(arrA[row-1], arrB[col-1])){
+               if(comparator(arrA[row-1], arrB[col-1])){
                   matrix[row][col] = matrix[row-1][col-1];
                   continue;
                }
@@ -976,14 +999,16 @@ const Tools = {
                   switch(direction){
                      case 2: // up - delete
                         operations.push({
-                           type: 'delete', index: row - 1,
+                           type: 'delete',
+                           index: row - 1,
                            value: arrA[row - 1]
                         });
                         row--;
                         break;
                      case 0: // left - insert
                         operations.push({
-                           type: 'insert', index: row,
+                           type: 'insert',
+                           index: row,
                            value: arrB[col - 1]
                         });
                         col--;
@@ -991,7 +1016,8 @@ const Tools = {
                      case 1: // diagonal - substitute (replace)
                         if(matrix[row][col] !== matrix[row - 1][col - 1]){
                            operations.push({
-                              type: 'replace', index: row - 1,
+                              type: 'replace',
+                              index: row - 1,
                               value: arrB[col - 1]
                            });
                         }
@@ -1069,18 +1095,36 @@ const Tools = {
    },
 
 
+
    Err: class Err extends Error {
-      /**make creating named Error object easier
-       * @param {string} message error message
+      /**## an easier to customize Error object
+       * @param {string|Error|unknown} message error message
        * @param {string} name error name
        * @param {number} code error code
        * @param {string} stack error stacktrace
        */
       constructor(message, name = null, code = null, stack = null){
+         if(message instanceof Error){
+            if(!name) name = message.name;
+            if(!code) code = message.code;
+            if(!stack) stack = message.stack;
+            message = message.message;
+         }
+
          super(message);
          if(name) this.name = name;
          if(code) this.code = code;
          if(stack) this.stack = stack;
+      }
+
+      /**## an easier to customize Error object
+       * @param {string|Error|unknown} message error message
+       * @param {string} name error name
+       * @param {number} code error code
+       * @param {string} stack error stacktrace
+       */
+      static from(message, name = null, code = null, stack = null){
+         return new Tools.Err(message, name, code, stack);
       }
    },
 
@@ -1096,18 +1140,44 @@ const Tools = {
 
 
 
-   /**just like `string.length` but exclude some special control chars
-    * given a bit more accurate results
+   /**similar to `string.length` but return actual length displayed in terminal.
+    * (size that will be displayed, not to be confused with the actual *length* of the string)
+    * this is because some characters may take more than 1 character width
+    * (e.g. emoji, full-width characters, etc.)
+    * @param {string} string
+    * @param {number} redundancyLv determine complexity of the algorithm (the higher, the better result but slower) (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
     */
-   ex_length(string){
-      if(!string) return 0;
-      return Tools.cleanString(string).length;
+   ex_length(string, redundancyLv = 0){
+      if(typeof string !== 'string') throw new TypeError('argument must be a string');
+      if(redundancyLv < 0) return string.length;
+
+      /**## Redundancy Level 0 - ANSI Code
+       */
+      string = Tools.cleanString(string);
+      const r0_length = string.length;
+      if(redundancyLv < 1) return r0_length;
+
+      /**## Redundancy Level 1 - Full-width Characters
+       */
+      let noFullWidth = string;
+      for(const range of Tools.CONSTS.UNICODES_RANGE_TABLE){
+         if(!range.type.endsWith('full')) continue;
+         noFullWidth = noFullWidth.replace(range.regex, '');
+      }
+      const r1_length = r0_length + (r0_length - noFullWidth.length);
+      if(redundancyLv < 2) return r1_length;
+
+      /**## Redundancy Level 2 - Emoji and ZWJ
+       */
+      const emojis = string.match(Tools.REGEXP.EmojiEach) ?? [];
+      const emojiUniLength = emojis.reduce((acc, cur) => acc + cur.length, 0);
+      return emojis.length * 2 + (r1_length - emojiUniLength);
    },
 
 
 
 
-   /**get Array if index matched by `string.matchAll()`
+   /**get an Array of matched index from `string.matchAll()`
     * @param {IterableIterator<RegExpMatchArray>}matchArr
     * @returns {number[]}
     */
@@ -1123,7 +1193,7 @@ const Tools = {
 
 
 
-   /**get Array if index matched by `string.matchAll()`
+   /**get matched result from `string.matchAll()` as an Array
     * @param {IterableIterator<RegExpMatchArray>}matchArr
     * @returns {MatchResult[]}
     */
@@ -1155,7 +1225,7 @@ const Tools = {
 
    /**create Hyper link for terminal
     *
-    * ### this works only with terminal that support hyper link
+    * ### this works only with terminals that support hyper link
     * @param {string}text text to display
     * @param {string} url
     * @returns {string} hyper link string, if the terminal doesn't support hyper link, it will return the url
@@ -1164,19 +1234,20 @@ const Tools = {
       url = encodeURI(url);
 
       if(!Tools.CheckCache.supportsHyperlink) return url;
-      return `\u001b]8;;${url}\u0007${text}\u001b]8;;\u0007`;
+      return `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
    },
 
 
 
    /**Generate a unique id base on ID-pallet
-    * @param {Array<string>|Set<string>}alreadyExistedIDs Array of IDs that already existed to not generate a duplicated
+    * @param {string[]|Set<string>|null}alreadyExistedIDs Array of IDs that already existed to not generate a duplicated
     * @param {string}pallet the structure of ID, the length of it would be the same for generated ID.
-    * @example Control characters are:
-    *    `C` a random en Character (a-z, A-Z)
-    *    `N` a random single Number
-    *    `B` a random of BOTH Character and Number
     *
+    * **Control characters are:**
+    * - `C` a random en Character (a-z, A-Z)
+    * - `N` a random single Number
+    * - `B` a random of BOTH Character and Number
+    * @example
     * // to create a unique ID with 2 Numbers in the front followed by `-` and 3 Characters in the back
     * const oldIDs = ['aSer2234', '4467j', '39_mIq'];
     * const newUniqueID = IDGenerator(oldIDs, 'NN-CCC');
@@ -1215,12 +1286,8 @@ const Tools = {
 
 
          if(alreadyExistedIDs){
-            for(const existedID of alreadyExistedIDs){
-               if(existedID == id){
-                  foundDub = true;
-                  break;
-               }
-            }
+            if(alreadyExistedIDs instanceof Set) foundDub = alreadyExistedIDs.has(id);
+            else foundDub = alreadyExistedIDs.includes(id);
 
             if(!foundDub) return id;
          }else return id;
@@ -1394,24 +1461,24 @@ const Tools = {
             throw new Error(`protocol must be 'nodeworker', 'udp4' or 'udp6' instead given '${protocol}'`);
 
          this.#proto = protocol;
-         if(!_modules.dgram&&protocol != 'nodeworker'){
+         if(!Tools._modules.dgram&&protocol != 'nodeworker'){
             throw new Error(`module 'dgram' not loaded use 'Tools._modules.dgram = require("dgram")' to load it`);
          }
 
          if(protocol == 'nodeworker'){
-            if(!_modules.worker_threads){
+            if(!Tools._modules.worker_threads){
                throw new Error(`module 'worker_threads' not loaded use 'Tools._modules.worker_threads = require("worker_threads")' to load it`);
             }
 
             if(
-               !(port instanceof _modules.worker_threads.Worker)&&
-               port !== _modules.worker_threads.parentPort&&
+               !(port instanceof Tools._modules.worker_threads.Worker)&&
+               port !== Tools._modules.worker_threads.parentPort&&
                port != null
             ) throw new Error(`port must be a type of 'Worker' or a 'parentPort' instead given '${typeof port}'`);
             if(!port){
-               if(_modules.worker_threads.isMainThread)
+               if(Tools._modules.worker_threads.isMainThread)
                   throw new Error('when using `nodeworker` protocol, `port` must be provided if on the main thread');
-               this.#socket = _modules.worker_threads.parentPort;
+               this.#socket = Tools._modules.worker_threads.parentPort;
                this.#init();
                return;
             }
@@ -1422,7 +1489,7 @@ const Tools = {
          }
 
          this.port = port;
-         this.#socket = _modules.dgram.createSocket(protocol);
+         this.#socket = Tools._modules.dgram.createSocket(protocol);
          this.#init();
       }
 
@@ -1697,7 +1764,10 @@ const Tools = {
     * that allow most standard Javascript Object to be parsed including **Map** and **Set**
     *
     * ### The JSON value must be *parsed* with `JSONReviver()` for this to work
-    *
+    * @template T
+    * @param {T} value
+    * @param {string} key
+    * @returns {T}
     * @example
     * const objWithNonParsable = {
     *    map: new Map([[2, 'two'], [3, 'three']]),
@@ -1751,6 +1821,10 @@ const Tools = {
     *
     * ### The JSON value must be *stringified* with `JSONReplacer()` for this to work
     *
+    * @template T
+    * @param {T} value
+    * @param {string} key
+    * @returns {T}
     * @example
     * const objWithNonParsable = {
     *    map: new Map([[2, 'two'], [3, 'three']]),
@@ -1916,6 +1990,12 @@ const Tools = {
 
 
    jsTime: {
+      /**
+       * compare two date and return the difference in human readable format
+       * @param {Date} [nowDate=new Date()]
+       * @param {Date} lastDate
+       * @returns {string}
+       */
       howLong(lastDate, nowDate = new Date()){
          let msDifference = nowDate.getTime() - lastDate.getTime();
          return Tools.jsTime.getTimeFromMS(msDifference).modern();
@@ -1930,8 +2010,8 @@ const Tools = {
        * @property {number} min
        * @property {number} sec
        * @property {string} ms
-       * @property {function(): string} toString
-       * @property {function(): string} modern to modern time string
+       * @property {() => string} toString
+       * @property {() => string} modern to modern time string
        */
       /**## Time from Millisecond
        *
@@ -2005,21 +2085,67 @@ const Tools = {
    },
 
 
-
-
-
-
-   /**linear interpolation function:
-    * this function will return any % of `Max` value
-    * depends on `Percentage` if 0 will return `Min`, 1 return `Max`
-    * and anything in between will return any value between `Min` and `Max`
-    * @param {number}Min min value return `Min` when `Percentage` == 0
-    * @param {number}Max max value return `Max` when `Percentage` == 1
-    * @param {number}Percentage percentage of the `Max` value
-    *
+   // LINK: @ndwk2s description
+   /**
+    * @typedef {{[key: string]: TValue}} GenericObject
+    * @template TValue
     */
-   lerp(Min, Max, Percentage){
-      return Min + (Max - Min) * Percentage;
+   /**
+    * ## remap
+    *
+    * similar to `Array.map()` but for Map and Object
+    *
+    * callback function should return an Object with `key` and `value` property
+    * , undefined to delete the pair or **`null`** to keep the pair as is
+    * @template TVal, TKey
+    * @param {Map<TKey, TVal>|GenericObject<TVal>} obj object to map
+    * @param {(key: TKey|string, value: TVal, obj: Map<TKey, TVal>|GenericObject<TVal>) => {key: any, value: any}|undefined|null} callback
+    * Parameters:
+    * - `key` - the key of the current element being processed in the object/map
+    * - `value` - the value of the current element being processed in the object/map
+    * - `obj` - the object/map that is being mapped
+    * @returns {Map|GenericObject<any>}
+    */
+   remap(obj, callback){
+      if(obj instanceof Map){
+         const newMap = new Map;
+         for(const [key, value] of obj){
+            const modValue = callback(key, value, newMap);
+
+            if(modValue === undefined) continue;
+            if(modValue === null) newMap.set(key, value);
+
+            if(modValue.key === undefined){
+               newMap.set(key, modValue);
+            }
+
+            newMap.set(modValue.key, modValue.value);
+
+            if(modValue.key !== key&&newMap.has(key)){
+               newMap.delete(key);
+            }
+         }
+         return newMap;
+      }
+
+      const newObj = {};
+      for(const key in obj){
+         const modValue = callback(key, obj[key], newObj);
+
+         if(modValue === undefined) continue;
+         if(modValue === null) newObj[key] = obj[key];
+
+         if(modValue.key === undefined){
+            newObj[key] = modValue;
+         }
+
+         newObj[modValue.key] = modValue.value;
+
+         if(modValue.key !== key&&newObj[key] !== undefined){
+            delete newObj[key];
+         }
+      }
+      return newObj;
    },
 
 
@@ -2027,6 +2153,14 @@ const Tools = {
    /**ToolsKit for doing complex math
     */
    MathKit: {
+      /**clamp a value between min and max
+       * @param {number} max
+       * @param {number} min
+       */
+      clamp(value, min, max){
+         return Math.min(Math.max(value, min), max);
+      },
+
       /**convert radians to degrees
        * @param {number} rad
        */
@@ -2051,7 +2185,7 @@ const Tools = {
        *
        * a type of Runge-Kutta method used for solving ordinary differential equations (ODEs).
        *
-       * from: [npm-numeric](https://github.com/sloisel/numeric/tree/master)
+       * @from [npm-numeric](https://github.com/sloisel/numeric/tree/master)
        *
        * for more info on how the calculation is done, visit [Numerary](https://numerary.readthedocs.io/en/latest/dormand-prince-method.html).
        *
@@ -2241,23 +2375,33 @@ const Tools = {
          if(lower > upper) throw new Error(`lower bound must be less than upper bound`);
          if(lower == upper) return 0;
 
-         if(!_modules.mathjs){
+         if(!Tools._modules.mathjs){
             throw new Error(`module 'mathjs' not loaded use 'Tools._modules.mathjs = require("mathjs")' to load it`);
          }
 
          let _express;
          if(typeof(expression) == 'string')
-            _express = _modules.mathjs.compile(expression);
+            _express = Tools._modules.mathjs.compile(expression);
          else _express = expression;
 
-         if(typeof(lower) == 'string') lower == _modules.mathjs.evaluate(lower);
-         if(typeof(upper) == 'string') upper == _modules.mathjs.evaluate(upper);
+         if(typeof(lower) == 'string') lower == Tools._modules.mathjs.evaluate(lower);
+         if(typeof(upper) == 'string') upper == Tools._modules.mathjs.evaluate(upper);
 
          const f_x = x => _express.evaluate({x: x});
          return Tools.MathKit.dopri(lower, upper, 0, f_x).at(upper);
       },
 
-
+      /**linear interpolation function:
+       * this function will return any % of `Max` value
+       * depends on `Percentage` if 0 will return `Min`, 1 return `Max`
+       * and anything in between will return any value between `Min` and `Max`
+       * @param {number}Min min value return `Min` when `Percentage` == 0
+       * @param {number}Max max value return `Max` when `Percentage` == 1
+       * @param {number}Percentage percentage of the `Max` value
+       */
+      lerp(Min, Max, Percentage){
+         return Min + (Max - Min) * Percentage;
+      },
 
       /**## Left Shift Unsigned with `0` or `(<<)`
        *
@@ -2541,23 +2685,68 @@ const Tools = {
 
 
 
+   // LINK: @ndwk2s description
+   /**
+    * ## `Tools.objectMap()` is deprecated, use `Tools.remap()` instead
+    *
+    * > for backward compatibility, this function remains as an alias for `Tools.remap()`
+    *
+    * ### `Tools.remap()` description:
+    * similar to `Array.map()` but for Map and Object
+    *
+    * callback function should return an Object with `key` and `value` property
+    * or undefined to delete the key
+    * @template TVal, TKey
+    * @param {Map<TKey, TVal>|GenericObject<TVal>} obj object to map
+    * @param {(key: TKey|string, value: TVal, obj: Map<TKey, TVal>|GenericObject<TVal>) => {key: any, value: any}|undefined|null} callback
+    * Parameters:
+    * - `key` - the key of the current element being processed in the object/map
+    * - `value` - the value of the current element being processed in the object/map
+    * - `obj` - the object/map that is being mapped
+    * @returns {Map|GenericObject<any>}
+    */
+   objectMap(obj, callback){
+      return Tools.remap(obj, callback);
+   },
 
 
 
 
    /**Find the number of Properties in an Object
     * Object Property can refer as Items in an Object while each Item consist of pair of `Key: Value`
-    * @param {Object}object
+    * @param {object}object
     * @returns Number of Property inside
     */
    propertiesCount(object) {
-      let count = 0;
+      return Object.keys(object).length;
+   },
 
-      for(let property in object) {
-         if(object.hasOwnProperty(property)) ++count;
-      }
+   /**
+    * like `String.padEnd` but escape all ANSI codes
+    * @param {string} str
+    * @param {number} targetLength
+    * @param {string} [padString=' ']
+    * @param {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
+    */
+   padEnd(str, targetLength, padString = ' ', redundancyLv = 0){
+      const actualLength = Tools.ex_length(str, redundancyLv);
+      if(actualLength >= targetLength) return str;
 
-      return count;
+      return str + padString.repeat(targetLength - actualLength);
+   },
+
+   /**
+    * like `String.padStart` but escape all ANSI codes
+    * @param {string} str
+    * @param {number} targetLength
+    * @param {string} [padString=' ']
+    * @param {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
+    */
+   padStart(str, targetLength, padString = ' ', redundancyLv = 0){
+      const actualLength = Tools.ex_length(str, redundancyLv);
+      if(actualLength >= targetLength) return str;
+
+      return padString.repeat(targetLength - actualLength) + str;
    },
 
    /**
@@ -2576,7 +2765,7 @@ const Tools = {
          },
          age: {
             pattern: ['--age'],
-            type: 'int' // <- type can be 'int', 'let ', 'string', 'choice', 'flag
+            type: 'int' // <- type can be 'int', 'let ', 'string', 'choice', 'flag'
          },
          hasCar: {
             pattern: ['--hascar', '--car'],
@@ -2600,7 +2789,7 @@ const Tools = {
       // hasCar: Arg { value: true, index: 4, type: 'flag' },
       // age: Arg { value: 34, index: 6, type: 'int' },
       // gender: Arg { value: 'f', index: -1, type: 'choice' } }
-    * @param {string[]} args Node.js commandline args
+    * @param {string[]} args commandline args
     * @param {Object} params Paramiter rules object
     * @param {boolean} caseSensitive
     * @returns {ParseArgs}
@@ -2732,6 +2921,7 @@ const Tools = {
     * @returns Boolean data type
     */
    parseBool(stringBool, strictMode = false){
+      stringBool = stringBool.toLowerCase();
       const boolRes = (stringBool == 'true'?true:false);
 
       if(!strictMode) return boolRes;
@@ -2745,6 +2935,7 @@ const Tools = {
    /**parse configuration file in UTF-8 encoding to a Javascript Object
     * @param {string}ConfigString configuration file content
     * @param {function(any, string, any): any} [JSONReviver=null] JSON reviver function, to parse JSON Object in side the config file
+    * @param {{ignoreGroups: boolean}} [options]
     * @returns {Object} configuration in Javascript Object
     * @example //in main file
     * const fs = require('fs');
@@ -2768,11 +2959,19 @@ const Tools = {
     *    "somekey": "somevalue",
     *    "nicearray": [1, 2, 3, 4, 5]
     * }
+    *
+    * # or adding a Goup similar to ini file
+    * [myGroup1]
+    * key1 = "value1"
+    * key2 = "value2"
     */
-   parseConfig(ConfigString, JSONReviver = null){
+   parseConfig(ConfigString, JSONReviver = null, options = {}){
+      const { ignoreGroups = false } = options;
+
       let rows = Tools.cleanArr(ConfigString.trim().split('\n'), ['', '\s', '\r']);
       let configObj = {};
       let indexOfSBeforeQ = 0;
+      let activeGroup = null;
 
       let json_str = '', jsonVar_key;
       let inJson = false;
@@ -2783,7 +2982,28 @@ const Tools = {
           * | row03
           */
          let eachRow = rows[rowIndex].trim();
-         if(eachRow.startsWith('#')) continue;
+         if(/^[#;]/.test(eachRow)) continue;
+
+         if(eachRow.startsWith('[')){
+            if(ignoreGroups) continue;
+
+            {
+               let success = false;
+
+               for(let i = 1; i < eachRow.length; i++){
+                  if(eachRow[i] == ']'&&eachRow[i - 1] != '\\'){
+                     activeGroup = eachRow.slice(1, i);
+                     if(!configObj[activeGroup]) configObj[activeGroup] = {};
+                     success = true;
+                     break;
+                  }
+               }
+
+               if(!success){
+                  throw new Error(`Tools.parseConfig(): invalid syntax, missing ']' at the end of the group. at \`${eachRow}\``);
+               }else continue;
+            }
+         }
 
          // | pair00 = pair01
          /**@type {string[]} */
@@ -2806,7 +3026,10 @@ const Tools = {
          if(inJson){
             if(jsonEnd(rowIndex, rows)){
                inJson = false;
-               configObj[jsonVar_key] = JSON.parse(json_str, JSONReviver);
+               if(activeGroup)
+                  configObj[activeGroup][jsonVar_key] = JSON.parse(json_str, JSONReviver);
+               else
+                  configObj[jsonVar_key] = JSON.parse(json_str, JSONReviver);
             }else{
                json_str += rows[rowIndex];
                continue;
@@ -2818,7 +3041,7 @@ const Tools = {
          // Parse Normal config
          eachPair = [eachPair[0].trim(), eachPair[1].trim()];
 
-         if(eachPair[1].startsWith('{')||eachPair[1].startsWith('[')){
+         if(/^[\[\{]/.test(eachPair[1])){
             inJson = true;
             [jsonVar_key, json_str] = eachPair;
          }
@@ -2828,7 +3051,7 @@ const Tools = {
             throw new Error(`Tools.parseConfig(): Key cannot starts with Numbers. at \`${eachRow}\``);
 
          {
-            const invalidChar = eachPair[0].replace(/[a-z$_0-9]/ig, '');
+            const invalidChar = eachPair[0].replace(/[a-z$_0-9.]/ig, '');
             if(invalidChar.length !== 0) throw new Error(`Tools.parseConfig(): these character(s) "${invalidChar}" can not be Parse. at \`${eachRow}\``);
          }
 
@@ -2847,12 +3070,13 @@ const Tools = {
          });
          const firstS = eachPair[1].search('#');
          const firstQ = allQs[0];
+         let valueWrappedInQ = false;
 
          if(firstQ != undefined&&(firstS == -1||firstQ < firstS)){
             const secQ = allQs[1] == undefined? -1 :allQs[1];
             const trailing = eachPair[1].slice(secQ + 2).trim();
 
-            if(trailing&&!trailing.startsWith('#')){
+            if(trailing&&!/^[#;]/.test(trailing)){
                throw new Error(
                   `Tools.parseConfig(): invalid syntax, unexpected charactor(s).\nat \`${eachRow}\`\n` +
                   ''.padStart(secQ+10 + eachPair[0].length, ' ') + '^'
@@ -2865,6 +3089,8 @@ const Tools = {
                   ' '.padStart(firstQ+7 + eachPair[0].length, ' ') + '^'
                );
             }
+
+            valueWrappedInQ = true;
             eachPair[1] = eachPair[1].slice(firstQ+1, secQ);
 
          }else if(firstS != -1){
@@ -2875,7 +3101,11 @@ const Tools = {
             if(!eachPair[1]) throw new Error(`Tools.parseConfig(): invalid syntax, expected expresion after '='.  at \`${eachRow}\``);
          }
 
-         configObj[eachPair[0]] = eachPair[1];
+         // if value isn't wrapped in quotes: tries to parse it
+         if(activeGroup)
+            configObj[activeGroup][eachPair[0]] = valueWrappedInQ? eachPair[1]: parseValue(eachPair[1]);
+         else
+            configObj[eachPair[0]] = valueWrappedInQ? eachPair[1]: parseValue(eachPair[1]);
       }
 
       return configObj;
@@ -2905,6 +3135,19 @@ const Tools = {
             !Tools.surroundedBy('"', rows[i].lastIndexOf('='), rows[i])
          );
       };
+
+      function parseValue(strValue){
+         switch (strValue.toLowerCase()) {
+            case 'true': return true;
+            case 'false': return false;
+            case 'null': return null;
+            case '':
+            case 'undefined': return undefined;
+            default:
+               if(!isNaN(strValue)) return Number(strValue);
+               return strValue;
+         }
+      }
    },
 
 
@@ -2915,9 +3158,10 @@ const Tools = {
     * let myNumber = pass(getNumber()); // print the return value of `getNumber()` and pass it to `mynumber`
     *
     * dostuff(pass(myNumber, doOtherStuff)); // pass `myNumber` to `dostuff()` and `doOtherStuff()`
+    * @template T
     * @param {Function} callback
-    * @param {any} value
-    * @returns {any} the given value
+    * @param {T} value
+    * @returns {T} the given value
     */
    pass(value, callback = null){
       if(callback) callback(value);
@@ -3055,8 +3299,9 @@ const Tools = {
 
    /**
     * pick a random item from an array
-    * @param {any[]} arr
-    * @returns {any}
+    * @template T
+    * @param {T[]} arr
+    * @returns {T}
     */
    randomPick(arr){
       if(arr.length <= 1) return arr[0];
@@ -3067,9 +3312,12 @@ const Tools = {
 
 
    /**
-    * *" I have a `Reg(Exp)`, I have an `indexOf`... Ahhh `redexOf`"* ...any further explanation needed?
+    * # redexOf (indexOf + RexExp + lastIndexOf)
+    * ### " I have a `Reg(Exp)`, I have an `indexOf`... Ahhh `redexOf`"* ...any further explanation needed?
     *  redexOf is an indexOf but with `RegExp` supported
-    * @param {string}string string to search from (can be omitted if use as extension)
+    *
+    * spoiler alert: it also works as `String.lastIndexOf()` if given negative position
+    * @param {string}string string to search from
     * @param {string|RegExp}searcher The Keyword, string or RegExp to search for
     * @param {number}position The index at which to begin searching the string object. If omitted, search starts at the beginning of the string. Also, if **Negative** value is use will search string from the back, similar to **`string.lastIndexOf()`** but position is **Negative Index**
     * @returns {number} position of the string that match the searcher, if none, `-1` would return
@@ -3113,19 +3361,60 @@ const Tools = {
 
 
 
-   REGEXP: {
+   REGEXP: Object.freeze({
       /**match non-word chars similar to \W
        * but accept multiple languages
        */
-      Seperators: /[\s-_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g,
+      Seperators: /[-\s_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g,
       /**similar to `Tools.REGEXP.Seperators` but it's more suitable for
        * text wrapping
+       *
+       * this will ignore any ANSI code
       */
-      SoftWrapSeperators: /(?<!\[)[\s,.\]})]/g,
+      SoftWrapSeperators: /(?<!\x1b\[\d{1,3}(?:;\d{1,3})*|\x1b\]8;;[^\x07]+|\x1b|\x07)[\s,.\]})]/g,
       /**similar to `Tools.REGEXP.SoftWrapSeperators` but it's more sensitive
+       *
+       * this will ignore any ANSI code
       */
-      HardWrapSeperators: /(?<!\[)[\s-_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g,
-   },
+      HardWrapSeperators: /(?<!\x1b\[\d{1,3}(?:;\d{1,3})*|[\x1b\x07]\]8;*[^\x07]*|\x1b|\x07)[-\s_・⧸/\\;:()\[\]、,.'＂"!^*＊=+「【】」（）]/g,
+      /**
+       * test if the given string is a valid Email
+       */
+      ValidEmail: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+      /**
+       * match any ANSI code
+       *
+       * if hyperlinks are found, will only match beginning and the end of a hyperlink escape sequence,
+       * along with the URL but kept the Label untouched.
+       */
+      ANSICode: /\x1b\[\d{1,3}(?:;\d{1,3})*m|\x1b\]8;;[^\x07]+\x07|(?<=\x07[\w\s]+)\x07\]8;;\x07/g,
+      /**
+       * ## match any single Emoji Unicode
+       * Created by Wiktor Stribiżew, Sep 9, 2021
+       * Matching all 4590 emoji characters defined in the Emoji Keyboard/Display Test Data for UTR #51 (Version: 13.1).
+       *
+       * @from [stribizhev/Emojis](https://github.com/stribizhev/Emojis/tree/main)
+       */
+      EmojiDetection: new RegExp(EMOJI_MATCHER_TOKEN),
+      /**
+       * ## match every single Emoji Unicode
+       * Created by Wiktor Stribiżew, Sep 9, 2021
+       * Matching all 4590 emoji characters defined in the Emoji Keyboard/Display Test Data for UTR #51 (Version: 13.1).
+       *
+       * @from [stribizhev/Emojis](https://github.com/stribizhev/Emojis/tree/main)
+       */
+      EmojiEach: new RegExp(EMOJI_MATCHER_TOKEN, 'g'),
+      /**
+       * ## match every group of Emoji Unicode
+       * Created by Wiktor Stribiżew, Sep 9, 2021
+       * Matching all 4590 emoji characters defined in the Emoji Keyboard/Display Test Data for UTR #51 (Version: 13.1).
+       *
+       * @from [stribizhev/Emojis](https://github.com/stribizhev/Emojis/tree/main)
+       */
+      EmojiEachGroup: new RegExp("(?:" + EMOJI_MATCHER_TOKEN + ")+", 'g'),
+
+      IniGroups: /^[\t ]*\[(.+)\][\t ]*$/gm
+   }),
 
    /**
     * resolve the Environment Variable in the given string
@@ -3147,6 +3436,7 @@ const Tools = {
    SafeTrue: class SafeTrue{
       #_i = 0;
       limit = 0;
+      noWarning = false;
 
       /**use for infinity-loops to prevent the loop from
        * unintentionally run forever
@@ -3157,7 +3447,7 @@ const Tools = {
        *    //do something
        * }
        */
-      constructor(limit = 10e9){
+      constructor(limit = 10e9, noWarning = false){
          this.limit = limit;
       }
 
@@ -3166,8 +3456,8 @@ const Tools = {
        * @returns {boolean}
        */
       get True(){
-         if(!(this.#_i++ < this.limit)){
-            process?.emitWarning('SafeTrue limit reached');
+         if(this.#_i++ >= this.limit){
+            if(!this.noWarning) process?.emitWarning('SafeTrue limit reached');
             return false;
          }
          return true;
@@ -3245,29 +3535,30 @@ const Tools = {
             bestMatchs.unshift(new Match(stringArr[i], query.length << 2, i));
 
 
-         let score = 0;
          let tfidf_s, word_s, includes_s, lcs_s;
          tfidf_s = word_s = includes_s = lcs_s = 0;
          for(const w of Tools.cleanArr(query.split(seperators))){
+            let _wScore = 0;
+
             if(Tools.includesWord(w, strList[i], false)){
                if(TF_IDFMaps&&TF_IDFMaps[i]?.has(w)){
-                  tfidf_s += w.length * (TF_IDFMaps[i].get(w).TF_IDF) * 2.9;
-                  score += w.length * (TF_IDFMaps[i].get(w).TF_IDF) * 2.9; // <- TF_IDF weight (2.9)
+                  _wScore = w.length * (TF_IDFMaps[i].get(w).TF_IDF) * 2.9; // <- TF_IDF weight (2.9)
+                  tfidf_s += _wScore;
                }else{
-                  word_s += w.length;
-                  score += w.length; // <- match word weight (1)
+                  _wScore = w.length; // <- match word weight (1)
+                  word_s += _wScore;
                }
             } else if(strList[i].includes(w)){
-               includes_s += w.length * .3;
-               score += w.length * .3; // <- includes() weight (0.3)
+               _wScore = w.length * .3; // <- includes() weight (0.3)
+               includes_s += _wScore;
             }
 
-            lcs_s += Tools.DataScienceKit.LCSLength_of(w, strList[i]) * 0.4;
-            score += Tools.DataScienceKit.LCSLength_of(w, strList[i]) * 0.4; // <- LCS weight (0.4)
+            const _lcs = Tools.DataScienceKit.LCSLength_of(w, strList[i]) * 0.4; // <- LCS weight (0.4)
+            lcs_s += _lcs;
          }
 
-         // bestMatchs.push(new Match(null, score, i));
-         bestMatchs.push(new Match(null, score, i, {
+         const totalScore = tfidf_s + word_s + includes_s + lcs_s;
+         bestMatchs.push(new Match(null, totalScore, i, {
             tfidf_s, word_s, includes_s, lcs_s, TF_IDFMap: TF_IDFMaps?.[i]
          }));
       }
@@ -3360,26 +3651,261 @@ const Tools = {
    /**clamp string's length to the given length
     * @param {string} str
     * @param {number} length target string length
-    * @param {string} dropLocation 'mid', 'start' or 'end' determine location in which the string would
+    * @param {'mid'|'start'|'end'} dropLocation 'mid', 'start' or 'end' determine location in which the string would
     * be dropped if the given str's length is smaller than `length`
+    * @param {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
     */
-   strClamp(str, length, dropLocation = 'mid'){
-      if(str.length <= length)
+   strClamp(str, length, dropLocation = 'mid', redundancyLv = 0){
+      const strLen = Tools.ex_length(str, redundancyLv);
+
+      if(strLen <= length)
          return str.padEnd(length, ' ');
 
       // the length of str that won't be removed
-      const leftoverAmu = str.length - (str.length - length) - 3;
+      const leftoverAmu = strLen - (strLen - length) - 3;
       switch(dropLocation){
          default:
             if(onJSRuntime) process?.emitWarning(`'${dropLocation}' is not a valid location type.`);
             else throw new Error(`'${dropLocation}' is not a valid location type.`);
          case 'mid':
             const haft_loa = (leftoverAmu >> 1);
-            return str.slice(0, haft_loa) + "..." + str.slice(str.length - haft_loa);
+            return Tools.strSlice(str, 0, haft_loa, redundancyLv) +
+               "..." +
+               Tools.strSlice(str, strLen - haft_loa, undefined, redundancyLv);
          case 'end':
-            return str.slice(0, leftoverAmu) + "...";
+            return Tools.strSlice(str, 0, leftoverAmu, redundancyLv) + "...";
          case 'start':
-            return "..." + str.slice(leftoverAmu);
+            return "..." + Tools.strSlice(str, leftoverAmu, undefined, redundancyLv);
+      }
+   },
+
+   /**
+    * @typedef {object} StringifyConfigOptions
+    * @property {string[]|undefined} ignoreList list of keys to ignore
+    * @property {boolean|undefined} minify minify the JSON output
+    * @property {((key: any, value: any) => {})|undefined} replacer JSON replacer
+    * @property {'merge'|'replace'|undefined} mode write mode, 'merge' will merge the new config with the old one, 'replace' will replace the old config with the new one (default to 'merge')
+    * @property {boolean|undefined} [useIniGroup=false] use ini groupping, use keys in the first level as groupName
+    * @property {boolean|undefined} alwaysWrapStrInQuotes always wrap string in quotes even if it's not required (doesn't have space, special char, etc.)
+    * @property {string|undefined} oldConfigStr the old config string to merge with (for mode 'merge' only)
+    */
+   /**
+    * stringify configuration object to a config string which can be saved to a file later.
+    *
+    * this string can be parsed back to the original object using `Tools.parseConfig()`
+    *
+    * also support INI group, if `useIniGroup` is set to `true`, the first level of the object will be used as group name
+    * @param {{[key:string]: any}} config
+    * @param {StringifyConfigOptions} [options]
+    */
+   stringifyConfig(config, options = {}){
+      const {
+         ignoreList = [],
+         minify = false,
+         replacer,
+         mode = 'merge',
+         useIniGroup = false,
+         alwaysWrapStrInQuotes = false,
+         oldConfigStr = ''
+      } = options;
+
+      const st = new Tools.SafeTrue(10**5);
+      let savedConfig = mode == 'merge'? oldConfigStr: '';
+
+      for(const key in config){
+         if(ignoreList.includes(key)) continue;
+
+         if(!useIniGroup){
+            write(key, config);
+            continue;
+         }
+
+         if(key === ''||typeof config[key] !== 'object'){
+            write(key, config, '');
+            continue;
+         }
+
+         for(const subKey in config[key]){
+            if(ignoreList.includes(subKey)) continue;
+            write(subKey, config[key], key);
+         }
+      }
+
+      return savedConfig;
+
+      function write(key, valueObj, group){
+         let strValue = '';
+         if(typeof valueObj[key] == 'object')
+            strValue = `${JSON.stringify(valueObj[key], replacer, minify?null:3)};\n`;
+         else{
+            if(typeof valueObj[key] == 'string'){
+               if(alwaysWrapStrInQuotes||/\s|[\{\[\}\]]/.test(valueObj[key]))
+                  strValue = `"${valueObj[key]}"`;
+               else strValue = `${valueObj[key]}`;
+            }
+            else strValue = `${valueObj[key]}`;
+         }
+
+         let keyIndex = Tools.redexOf(savedConfig, new RegExp(`^[ \\t]*\\b${key}\\s*=`, 'm'));
+         let existGroupIndex;
+         if(group === ''){
+            existGroupIndex = -3;
+
+         }else existGroupIndex = useIniGroup? savedConfig.indexOf(`[${group}]`): null
+
+         let cantFindGroup = existGroupIndex === -1;
+         if(cantFindGroup){
+            existGroupIndex = savedConfig.length + 2;
+            savedConfig += `\n\n[${group}]\n`;
+         }
+
+         if(keyIndex == -1){
+            if(useIniGroup){
+               if(cantFindGroup){
+                  savedConfig += `${key} = ${strValue}\n`;
+               }else{
+                  savedConfig = Tools.strSplice(savedConfig, existGroupIndex + group.length + 3, 0, `${key} = ${strValue}\n`);
+               }
+
+            }else savedConfig += `${key} = ${strValue}\n`;
+            return;
+         }
+
+         let currentGroupIndex = null, currentGroup = null;
+         if(useIniGroup){
+            currentGroupIndex = Tools.redexOf(savedConfig.slice(0, keyIndex), Tools.REGEXP.IniGroups, -1);
+            currentGroup = currentGroupIndex == existGroupIndex? group: savedConfig.slice(
+               currentGroupIndex + 1,
+               savedConfig.slice(currentGroupIndex, keyIndex).indexOf(']') + currentGroupIndex
+            );
+         }
+
+         let valueStart = savedConfig.indexOf('=', keyIndex) + 1;
+         let valueEnd = Tools.getMatchAllIndexes(
+            savedConfig.slice(valueStart).matchAll(/(?<!\\)[#\n;]/g)
+         )?.[0] ?? -1;
+
+         if(valueEnd == -1) valueEnd = savedConfig.length;
+         else valueEnd += valueStart;
+
+         let valueEndWithComment = savedConfig[valueEnd] === '\n'
+            ? valueEnd
+            : savedConfig.indexOf('\n', valueEnd + 1);
+
+         if(isJSONValue(valueStart, valueEnd)){ // value is JSON, find an actual JSON end
+            valueEnd = findJSONEndIndex(valueStart);
+         }
+
+         if(currentGroup&&currentGroup !== group){ // the old pair is in a wrong group, let's move it
+            const clipboard = savedConfig.slice(keyIndex, valueEndWithComment + 1);
+
+            const removeCount = valueEndWithComment - keyIndex;
+            const keyOffset = valueStart - keyIndex;
+            const vEndOffset = valueEnd - keyIndex;
+            // remove old pair
+            // Note: removeCount + 1 to remove the '\n' at the end of the line
+            savedConfig = Tools.strSplice(savedConfig, keyIndex, removeCount + 1, '');
+
+            // recalibrate Indexs
+            if(existGroupIndex > keyIndex) existGroupIndex -= removeCount;
+            else existGroupIndex++;
+            keyIndex = existGroupIndex + group.length + 2;
+            valueStart = keyIndex + keyOffset;
+            valueEnd = keyIndex + vEndOffset;
+
+            // move key index to the correct group
+            savedConfig = Tools.strSplice(savedConfig, keyIndex, 0, clipboard);
+         }
+
+         // console.log(keyIndex, valueStart, valueEnd, `'${savedConfig.slice(valueStart, valueEnd)}'`);
+         savedConfig = Tools.strSplice(savedConfig, valueStart, valueEnd - valueStart, ' ' + strValue);
+      }
+
+      function findJSONEndIndex(valueStart){
+         let indentLvl = 0, readHead = valueStart, inStringBlock = false;
+         do {
+            readHead++;
+
+            if(inStringBlock){
+               if(savedConfig[readHead] == '"'&&savedConfig[readHead - 1] != '\\')
+                  inStringBlock = false;
+               continue;
+            }
+
+            if(savedConfig[readHead] == '"'){
+               inStringBlock = true;
+               continue;
+            }
+
+            if(savedConfig[readHead] == '{'||savedConfig[readHead] == '[')
+               indentLvl++;
+            if(savedConfig[readHead] == '}'||savedConfig[readHead] == ']')
+               indentLvl--;
+
+         } while(indentLvl&&st.True);
+
+         if(st.True == false)
+            throw new Error('failed to write config\nReason: loop limit reached');
+
+         return readHead + 1;
+      }
+
+      function isJSONValue(valueStart, valueEnd){
+         return /^[\t ]*[\[\{]/.test(savedConfig.slice(valueStart, valueEnd));
+      }
+   },
+
+   /**
+    * @typedef {object} StrJustifyOptions
+    * @property {string} [filler=' '] char to fill the `target`
+    * @property {'left'|'right'|'center'|'spacebetween'} [align='center'] alignment of the string
+    * @property {'hidden'|'visible'|'collapse'} [overflow='hidden'] overflow how to handle overflow, `'collapse'` will shorten the string to the target length while leaving `...`, the other two will work the same as CSS overflow
+    * @property {'start'|'mid'|'end'} [collapseLocation='end'] location of the collapse string `[...]`
+    * @property {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
+    */
+   /**
+    * justify the string to the given length, similar to `strClamp` but with more control
+    * @param {string|string[]} str
+    * @param {number} length target string length
+    * @param {StrJustifyOptions} [options={}]
+    */
+   strJustify(str, length, options = {}){
+      const {
+         filler = ' ',
+         align = 'center',
+         overflow = 'hidden',
+         collapseLocation = 'end',
+         redundancyLv = 0
+      } = options;
+      const isArr = str instanceof Array;
+      const joinedStr = isArr? str.join(''): str;
+      const strLen = Tools.ex_length(joinedStr, redundancyLv); // exclude ANSI code length
+
+      if(strLen > length){
+         if(overflow == 'collapse')
+            return Tools.strLimit(joinedStr, length, collapseLocation);
+         if(overflow == 'hidden')
+            return joinedStr.slice(0, length);
+         return joinedStr;
+      }
+
+      switch(align){
+         case 'spacebetween':
+            if(isArr){
+               const space = filler.repeat((length - strLen) / (str.length - 1));
+
+               return str.reduce((acc, cur, i) => {
+                  if(i == 0) return acc;
+                  return acc + space + cur;
+               }, str[0]);
+            } // if not Array, fall through to default
+         default:
+         case 'center':
+            return Tools.strSurround(joinedStr, filler, length);
+         case 'right':
+            return Tools.padStart(joinedStr, length, filler);
+         case 'left':
+            return Tools.padEnd(joinedStr, length, filler);
       }
    },
 
@@ -3387,26 +3913,65 @@ const Tools = {
    /**limit string length, similar to strClamp but doesn't pad to the target length
     * @param {string} str
     * @param {number} limit max string length allowed
-    * @param {string} dropLocation 'mid', 'start' or 'end' determine location in which the string would
+    * @param {'mid'|'start'|'end'} dropLocation 'mid', 'start' or 'end' determine location in which the string would
     * be dropped if the given str's length is smaller then `length`
     */
    strLimit(str, limit, dropLocation = 'mid'){
-      if(str.length <= limit) return str;
+      const strLen = Tools.ex_length(str);
+
+      if(strLen <= limit) return str;
 
       // the length of str that won't be removed
-      const leftoverAmu = str.length - (str.length - limit) - 3;
+      const leftoverAmu = strLen - (strLen - limit) - 3;
       switch(dropLocation){
          default:
             if(onJSRuntime) process?.emitWarning(`'${dropLocation}' is not a valid location type.`);
             else throw new Error(`'${dropLocation}' is not a valid location type.`);
          case 'mid':
             const haft_loa = (leftoverAmu >> 1);
-            return str.slice(0, haft_loa) + "..." + str.slice(str.length - haft_loa);
+            return Tools.strSlice(str, 0, haft_loa) + "..." + Tools.strSlice(str, strLen - haft_loa + 1);
          case 'end':
-            return str.slice(0, leftoverAmu) + "...";
+            return Tools.strSlice(str, 0, leftoverAmu) + "...";
          case 'start':
-            return "..." + str.slice(leftoverAmu);
+            return "..." + Tools.strSlice(str, leftoverAmu);
       }
+   },
+
+   // TODO: make this work with redundancyLv > 1
+   /**
+    * slice string, similar to `String.slice()` but with string
+    * @param {string} str string to slice
+    * @param {number} start start index
+    * @param {number} [end] end index
+    * @param {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
+    */
+   strSlice(str, start, end, redundancyLv = 0){
+      let ANSIIndexs = [...str.matchAll(Tools.REGEXP.ANSICode)]
+         .map(v => {
+            return {start: v.index, end: v.index + v[0].length, length: v[0].length}
+         });
+
+      if(!end) end = Tools.ex_length(str, redundancyLv);
+
+      // console.log(ANSIIndexs)
+
+      let ANSICodeStartOffset = 0;
+      let ANSICodeEndOffset = 0;
+      for(let i = 0; i < ANSIIndexs.length; i++){
+         if(ANSIIndexs[i].start - ANSICodeStartOffset < start){
+            ANSICodeStartOffset += ANSIIndexs[i].length;
+         }
+
+         if(ANSIIndexs[i].start - ANSICodeEndOffset <= end){
+            ANSICodeEndOffset += ANSIIndexs[i].length;
+         }
+
+         if(ANSIIndexs[i].start - ANSICodeEndOffset > end) break;
+      }
+
+      // console.log(ANSICodeStartOffset, ANSICodeEndOffset);
+
+      return str.slice(start + ANSICodeStartOffset, end + ANSICodeEndOffset);
    },
 
 
@@ -3416,12 +3981,15 @@ const Tools = {
     * @param {string}str
     * @param {number}index
     * @param {number}removeCount number of Chars to remove
-    * @param {string}strToInsert
+    * @param {string|undefined|null}strToInsert
     */
    strSplice(str, index, removeCount, strToInsert = null){
+      if(removeCount < 0) removeCount = 0;
+      if(index < str.length * -1) index = 0; // prevent negative index out of bounds
+
       if(strToInsert){
-         return str.slice(0, index) + strToInsert + str.slice(index + removeCount);
-      }else return str.slice(0, index) + str.slice(index + removeCount);
+         return str.slice(0, index) + strToInsert + (index < 0&&removeCount + index >= 0?'':str.slice(index + removeCount));
+      }else return str.slice(0, index) + (index < 0&&removeCount + index >= 0?'':str.slice(index + removeCount));
    },
 
 
@@ -3430,11 +3998,15 @@ const Tools = {
     * @param {string} filler char to fill the `target`
     * @param {number} length the final length
     * @param {string} target
+    * @param {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
     * @returns {string}
     */
-   strSurround(target, filler, length){
-      const padding = Math.ceil(length / 2 - target.length / 2);
-      return ''.padEnd(padding, filler) + target.padEnd(length / 2 + target.length / 2, filler);
+   strSurround(target, filler, length, redundancyLv = 0){
+      const targetLen = Tools.ex_length(target, redundancyLv);
+      const padding = Math.ceil(length / 2 - targetLen / 2);
+
+      return Tools.padEnd(' ', padding, filler, redundancyLv) +
+         Tools.padEnd(target, length / 2 + targetLen / 2, filler, redundancyLv);
    },
 
 
@@ -3452,6 +4024,7 @@ const Tools = {
     * while each line is equal or lessthan the given max length
     *
     * **SoftBoundary** (default): similar to **Strict** but with some tolerance
+    * @property {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
     */
    /**wrap string to the given max line length
     * @param {string} str string to wrap
@@ -3462,30 +4035,37 @@ const Tools = {
    strWrap(str, maxLineLength, options = {}){
       if(!str) return '';
 
+      const {
+         indent = '',
+         firstIndent = '',
+         mode = 'softboundery',
+         redundancyLv = 0
+      } = options;
+
       let content = '';
       const SoftSep_reg = Tools.REGEXP.SoftWrapSeperators;
       const HardSep_reg = Tools.REGEXP.HardWrapSeperators;
 
       const innerBound = maxLineLength * 0.67;
       str = str.toString().split('\n');
-      if(typeof options.firstIndent == 'number')
-         options.firstIndent = ''.padEnd(options.firstIndent, ' ');
-      if(typeof options.indent == 'number')
-         options.indent = ''.padEnd(options.indent, ' ');
+      if(typeof firstIndent == 'number')
+         firstIndent = ''.padEnd(firstIndent, ' ');
+      if(typeof indent == 'number')
+         indent = ''.padEnd(indent, ' ');
 
-      if(options.firstIndent) content += options.firstIndent;
+      if(firstIndent) content += firstIndent;
       for(let eachLine of str){
-         while(eachLine.length > maxLineLength){
+         while(Tools.ex_length(eachLine, redundancyLv) > maxLineLength){
             const indexesOfSep = Tools.getMatchAllIndexes(eachLine.matchAll(SoftSep_reg))
                .filter(v => v >= innerBound);
             let indexOfSep = indexesOfSep[0] ?? -1;
 
-            if(options.indent){
-               if(options.firstIndent||options.firstIndent == '') options.firstIndent = null;
-               else content += options.indent;
+            if(indent){
+               if(firstIndent == '') firstIndent = null;
+               else content += indent;
             }
 
-            if(options.mode == 'softboundery'){
+            if(mode == 'softboundery'){
                if(indexOfSep == -1){
                   const indexesOfHardSep = Tools.getMatchAllIndexes(eachLine.matchAll(HardSep_reg))
                      .filter(v => v >= innerBound);
@@ -3499,9 +4079,9 @@ const Tools = {
             eachLine = eachLine.substring(indexOfSep);
          }
 
-         if(options.indent){
-            if(options.firstIndent||options.firstIndent == '') options.firstIndent = null;
-            else content += options.indent;
+         if(indent){
+            if(firstIndent == '') firstIndent = null;
+            else content += indent;
          }
          content += eachLine.concat('\n');
       }
@@ -3542,14 +4122,14 @@ const Tools = {
       const min = Tools.CheckCache.forceColor ? 1 : 0;
 
       if (process.platform === 'win32') {
-         if(!_modules.os) _modules.os = require('os');
+         if(!Tools._modules.os) Tools._modules.os = require('os');
          // Node.js 7.5.0 is the first version of Node.js to include a patch to
          // libuv that enables 256 color output on Windows. Anything earlier and it
          // won't work. However, here we target Node.js 8 at minimum as it is an LTS
          // release, and Node.js 7 is not. Windows 10 build 10586 is the first Windows
          // release that supports 256 colors. Windows 10 build 14931 is the first release
          // that supports 16m/TrueColor.
-         const osRelease = _modules.os.release().split('.');
+         const osRelease = Tools._modules.os.release().split('.');
          if (
             Number(process.versions.node.split('.')[0]) >= 8 &&
             Number(osRelease[0]) >= 10 &&
@@ -3913,7 +4493,7 @@ const Tools = {
     * @param {number}maxFractDigits Number of digits after the decimal point. Must be in the range 0 - 20, inclusive.
     */
    toShortNum(number, maxFractDigits = 2){
-      let s_times = 0;
+      let s_times = 0; // how many times the number is shorten (by +-10^3)
       let absNum = Math.abs(number);
       const sign = Math.sign(number);
       const isNegPower = absNum > 0&&absNum < 1;
@@ -3958,7 +4538,53 @@ const Tools = {
       }
    },
 
+   /**
+    * @typedef {Object} WriteConfigOptions
+    * @property {string[]|undefined} ignoreList list of keys to ignore
+    * @property {boolean|undefined} minify minify the JSON output
+    * @property {((key: any, value: any) => {})|undefined} replacer JSON replacer
+    * @property {'merge'|'replace'|undefined} mode write mode, 'merge' will merge the new config with the old one, 'replace' will replace the old config with the new one (default to 'merge')
+    * @property {boolean|undefined} [useIniGroup=false] use ini groupping, use keys in the first level as groupName
+    * @property {boolean|undefined} alwaysWrapStrInQuotes always wrap string in quotes even if it's not required (doesn't have space, special char, etc.)
+    */
+   /**
+    * asynchronously write configuration to the given path
+    *
+    * which an be parsed back to the original object using `Tools.parseConfig()`
+    *
+    * also support INI group, if `useIniGroup` is set to `true`, the first level of the object will be used as group name
+    * @param {{[key:string]: any}} config
+    * @param {string} path
+    * @param {WriteConfigOptions} [options]
+    */
+   writeConfig(config, path, options = {}){
+      if(!Tools._modules.fs) throw new Error('fs module is required for Tools.writeConfig()\nimport them with `Tools._modules.fs = require("fs")`');
 
+      const {
+         ignoreList = [],
+         minify = false,
+         replacer,
+         mode = 'merge',
+         useIniGroup = false,
+         alwaysWrapStrInQuotes = false
+      } = options;
+
+      let savedConfig = '';
+      if(Tools._modules.fs.existsSync(path)&&mode == 'merge')
+         savedConfig = Tools._modules.fs.readFileSync(path, { encoding: 'utf-8' });
+
+      savedConfig = Tools.stringifyConfig(config, {
+         ignoreList,
+         minify,
+         replacer,
+         mode,
+         useIniGroup,
+         alwaysWrapStrInQuotes,
+         oldConfigStr: savedConfig
+      });
+
+      Tools._modules.fs.writeFileSync(path, savedConfig, { encoding: 'utf-8' });
+   },
 }
 
 
