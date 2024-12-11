@@ -1,12 +1,18 @@
 //////////// Tools ////////////
-/**tools for Javascript
- * @version 2.12.9
+/**# tools for Javascript
+ * @version 2.12.14
  * for Node.js >= 16.x.x
+ * @module Tools
  * @changes
- * - updated: JSDoc now uses @template
- * - deprecated: objectMap() (ops, it's not needed)
- * - added: objectMap() and remap()
- * - added padStart(), padEnd() and strJustify()
+ * - add: JSComments Regex
+ * - update: IPC
+ * - optimize: strWrap()
+ * - add: class ConsoleTime
+ * - fix: types error
+ * - remove: modification of Object prototypes
+ *
+ * DISCLAIMER: parts of this code are based on or copied (with slight modification) from other sources.
+ * for license information, please refer to the respective sources.
  */
 "use strict";
 const onJSRuntime = (typeof window === 'undefined'||typeof process !== 'undefined');
@@ -18,6 +24,9 @@ var _modules = {
    /**3rd party Module*/
    mathjs: null,
 };
+let _global = {
+   consoleTimeInstances: null
+}
 
 /**
  * Created by Wiktor Stribiżew, Sep 9, 2021
@@ -159,7 +168,7 @@ class Dopri {
     *
     * ## use `Dopri.at()` to get the result of the integration.
     *
-    * from: [npm-numeric](https://github.com/sloisel/numeric/tree/master)
+    * @from [npm-numeric](https://github.com/sloisel/numeric/tree/master)
     *
     * for more info on how the calculation is done, visit [Numerary](https://numerary.readthedocs.io/en/latest/dormand-prince-method.html).
     *
@@ -173,7 +182,7 @@ class Dopri {
       this.ymid = ymid;
       this.iterations = iterations;
       this.events = events;
-      this.message = msg;
+      this.msg = msg;
    }
 
    _at(xi, j) {
@@ -203,6 +212,7 @@ class Dopri {
 
    /**
     * @param {number|number[]} x
+    * @returns {number|number[]}
     */
    at(x) {
       let i, j, k;
@@ -264,9 +274,134 @@ const Tools = {
    _modules,
 
    /**
+    * @typedef {Object} ArrToStringOptions
+    * @property {number} [maxDepth=4] maximum depth to parse, "depth" represent layers of the array (e.g. depth of 3 is a 3D array)
+    * @property {number|string} [indent=3] indentation, `number` represent number of spaces, `string` represent the string to use for indentation
+    * @property {number} [maxRow=10] maximum number of displayable "rows" of each layer
+    * @property {number} [maxCol=20] maximum number of displayable "columns" of each layer
+    * @property {boolean} [color=false] enable syntax highlighting
+    * @property {number|string} [defColor] default color: color used for reseting foreground color,
+    * without this option will reset all color and formatting
+    * @property {boolean} [noHeader] disable type heading that shows the type and dimensions of the given array.
+    *
+    * this does not affect values inside the array
+    */
+   /**
+    * parse Array-Like object to string representation of it's values
+    * with syntax highlighting
+    *
+    * @param {any[]|any} arr - Array-Like object
+    * @param {ArrToStringOptions} [options] - options
+    * @returns {string} string representation of the array
+    */
+   arrToString(arr, options = {}){
+      let {
+         maxDepth = 4,
+         indent = 3,
+         maxRow = 10,
+         maxCol = 20,
+         color = false,
+         defColor = undefined,
+         noHeader = false
+      } = options;
+
+      if(maxDepth < 1) maxDepth = 1;
+      const yuStringOptions = { color, defColor };
+
+      const dim = Tools.getDimensions(arr, 'max');
+      const dimScanThreshold = dim.length * .4;
+      const _indent = typeof indent == 'number'? ' '.repeat(indent): indent;
+      let nccColor = null;
+
+      if(color){
+         nccColor = {
+            magenta: Tools.ncc(0xb03fba),
+            gray: Tools.ncc(0x494949),
+            _default: Tools.ncc(defColor)
+         };
+      }
+
+      if(!noHeader&&(!(arr instanceof Array)||(dim.length > 2||Math.max(...dim) > 5))){
+         return getHeaderName(arr) + traverse(arr, 0);
+      }
+      else return traverse(arr, 0);
+
+
+      function traverse(arr, depth, indentCount = 0){
+         let str = '';
+         if(depth > maxDepth - 1){
+            if(color) return nccColor.gray + `... [${getArrTypeName(arr) || 'Array'}]` + nccColor._default;
+            else return `... [${getArrTypeName(arr) || 'Array'}]`;
+         }
+
+         if(!Tools.isArrayLike(arr))
+            return str + Tools.yuString(arr, yuStringOptions);
+
+         let dimIn;
+         if(depth > dimScanThreshold)
+            dimIn = Tools.getDimensions(arr, 'max'); // <- resources intensive, use only when needed
+         else dimIn = dim.slice(depth);
+
+         const newLine = dim[depth + 1] != null&&(dimIn[2] != null||dimIn[1] > 2)&&depth < maxDepth - 1;
+         const indent = indentCount? _indent.repeat(indentCount): '';
+         const indentIn = indent + _indent;
+         const LBrack = (newLine ? '[\n' + indentIn: '[');
+         const RBrack = (newLine ? '\n' + indent + ']': ']');
+         const arrLen = arr.length;
+
+         str += LBrack;
+
+         for(let i = 0; i < arrLen; i++){
+            if(Tools.isArrayLike(arr[i])){
+               str += getArrTypeName(arr[i]) + traverse(arr[i], depth + 1, newLine? indentCount + 1: indentCount);
+            }
+            else str += Tools.yuString(arr[i], yuStringOptions);
+
+            if(newLine){
+               if(i >= maxRow - 2){
+                  str += ',\n' + indentIn;
+                  if(color) str += nccColor.gray + '... (' + (arrLen - maxRow + 1) + ' more)' + nccColor._default;
+                  else str += '... (' + (arrLen - maxRow + 1) + ' more)';
+                  break;
+               }
+            }else{
+               if(i >= maxCol - 2){
+                  if(color) str += ', ' + nccColor.gray + '... (' + (arrLen - maxCol + 1) + ' more)' + nccColor._default;
+                  else str += ', ' + '... (' + (arrLen - maxCol + 1) + ' more)';
+                  break;
+               }
+            }
+
+            if(i != arrLen - 1) str += newLine? ',\n' + indentIn: ', ';
+         }
+
+         str += RBrack;
+         return str;
+      }
+
+
+      function getArrTypeName(arr){
+         if(arr instanceof Array) return '';
+
+         if(color)
+            return nccColor.magenta + `${arr.constructor.name}: ` + nccColor._default;
+         else return `${arr.constructor.name}: `;
+      }
+
+      function getHeaderName(arr){
+         if(!Tools.isArrayLike(arr)) return '';
+
+         if(color)
+            return nccColor.magenta + `${arr.constructor.name}(${dim}): ` + nccColor._default;
+         else return `${arr.constructor.name}(${dim}): `;
+      }
+   },
+
+
+   /**
    Check if [`argv`](https://nodejs.org/docs/latest/api/process.html#process_process_argv) has a specific flag.
 
-   from npm package [has-flag](https://www.npmjs.com/package/has-flag)
+   @from npm package [has-flag](https://www.npmjs.com/package/has-flag)
    @param {string} flag
    @param {string[]} [argv=process?.argv] arguments Array
    @param flag - CLI flag to look for. The `--` prefix is optional.
@@ -302,7 +437,7 @@ const Tools = {
    ```
    */
    argvHasFlag(flag, argv = process?.argv) {
-      if(!argv||!flag) return false;
+      if(!argv||typeof flag != 'string') return false;
 
       const prefix = flag.startsWith('-') ? '' : (flag.length === 1 ? '-' : '--');
       const position = argv.indexOf(prefix + flag);
@@ -316,7 +451,7 @@ const Tools = {
     */
    async asyncSleep(milliseconds){
       return new Promise((resolve, reject) => {
-         if(!milliseconds||milliseconds < 0) resolve();
+         if(!milliseconds||milliseconds < 0||typeof milliseconds != 'number') resolve();
 
          const date = Date.now();
          const checkTime_inter = setInterval(checkTime, 1);
@@ -382,7 +517,7 @@ const Tools = {
          //add \n
          // console.log(reading, nextNearest);
          let isolated = JsonString.substring(reading, nextNearest);
-         let quoteIndex = Tools.getMatchAllIndexes(isolated.matchAll("\""))
+         let quoteIndex = Tools.getMatchAllIndexes(isolated.matchAll(/"/g))
             .filter(i => i != 0? isolated[i - 1] != "\\": true); //remove index of " that has \ as prefix
          if((quoteIndex.length % 2) != 0)
             throw new Error("cannot match Double-Quote correctly from string: \"" + isolated + '\"');
@@ -448,6 +583,55 @@ const Tools = {
    },
 
 
+   /**
+    * call a function before the process exit
+    * usefull for cleaning up resources before the process exit
+    * @param {(eventType: 'exit'|'SIGINT'|'SIGUSR1'|'SIGUSR2'|'uncaughtException'|'SIGTERM', ...args: any) => void} callback callback function to call before exit
+    */
+   beforeExit(callback, preventImmediateExit = false){
+      if(preventImmediateExit)
+         process.stdin.resume();
+
+      let secondSigInt = false;
+
+      [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`].forEach((eventType) => {
+         process.on(eventType, (...args) => {
+            if([`SIGINT`, `SIGUSR1`, `SIGUSR2`].includes(eventType)){
+               if(secondSigInt){
+                  console.log('Forcefully Exiting...');
+                  process.exit(1);
+               } else secondSigInt = true;
+            }
+
+            callback(eventType, ...args);
+         });
+      });
+   },
+
+
+
+   /**
+    * change the timezone of the given date object
+    * @param {Date} date
+    * @param {string} timezone IANA timezone string see list of timezone from this [wiki](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+    *
+    * to get the local timezone of the machine, you can use `Intl.DateTimeFormat().resolvedOptions().timeZone`
+    * @from [stackoverflow](https://stackoverflow.com/a/53652131)
+    */
+   changeDateTimezone(date, timezone) {
+      // calculate the target date
+      // (`invdate` will think it's UTC but the actual date will be in the target timezone)
+      const invdate = new Date(`${date.toLocaleString('en-US', {
+         timeZone: timezone
+      })}`);
+
+      // so we calculate the time difference between the given `date` and `invdate`
+      const diff = date.getTime() - invdate.getTime();
+      // then subtract that difference from the given `date`
+      // to get the corect date with correct timezone
+      return new Date(date.getTime() - diff);
+   },
+
 
    /**get type of the character at the given index
     * @param {number} index
@@ -455,12 +639,15 @@ const Tools = {
     */
    charTypeAt(index, str){
       const table = Tools.CONSTS.UNICODES_RANGE_TABLE;
+      if(index < 0) index = str.length + index;
       const code = str.charCodeAt(index);
+
+      if(isNaN(code)) return null;
 
       for(let i = table.length >> 1, opt = 0; i >= 0&&i < table.length; opt++){
          if(opt > (table.length >> 1) + 1) break;
 
-         if(table[i].to instanceof Array){
+         if(Tools.isArrayLike(table[i].to)){
             for(let j = 0; j < table[i].to.length; j++){
                if(code >= table[i].from[j]&&code <= table[i].to[j]){
                   return table[i].type;
@@ -484,36 +671,56 @@ const Tools = {
 
 
    CheckCache: class CheckCache {
-      static #supportsColor;
-      static #supportsHyperlink;
-      static #forceColor;
+      /**@type {null|boolean} */
+      static #supportsColor = null;
+      /**@type {null|boolean} */
+      static #supportsHyperlink = null;
+      /**@type {null|boolean} */
+      static #forceColor = null;
 
       static get supportsColor(){
-         if(this.#supportsColor === undefined)
+         if(this.#supportsColor == null)
             this.#supportsColor = Tools.supportsColor();
 
          return this.#supportsColor;
       }
 
       static get supportsHyperlink(){
-         if(this.#supportsHyperlink === undefined)
+         if(this.#supportsHyperlink == null)
             this.#supportsHyperlink = Tools.supportsHyperlink();
 
          return this.#supportsHyperlink;
       }
 
+      /**@param {null|boolean} value */
+      static set supportsColor(value){
+         this.#supportsColor = value;
+      }
+
+      /**@param {null|boolean} value */
+      static set supportsHyperlink(value){
+         this.#supportsHyperlink = value;
+      }
+
       static get forceColor(){
+         if(!onJSRuntime) this.#forceColor = false;
+
          if(this.#forceColor === undefined){
             const env = process.env;
 
-            if (Tools.argvHasFlag('no-color') ||
+            if (
+               Tools.argvHasFlag('no-color') ||
                Tools.argvHasFlag('no-colors') ||
-               Tools.argvHasFlag('color=false')) {
+               Tools.argvHasFlag('color=false')
+            ) {
                this.#forceColor = false;
-            } else if (Tools.argvHasFlag('color') ||
+            }
+            else if (
+               Tools.argvHasFlag('color') ||
                Tools.argvHasFlag('colors') ||
                Tools.argvHasFlag('color=true') ||
-               Tools.argvHasFlag('color=always')) {
+               Tools.argvHasFlag('color=always')
+            ) {
                this.#forceColor = true;
             }
 
@@ -524,6 +731,7 @@ const Tools = {
 
          return this.#forceColor;
       }
+
       static set forceColor(value){
          this.#forceColor = value;
       }
@@ -541,13 +749,13 @@ const Tools = {
     */
    cleanArr(arr, itemToClean = null){
       if(itemToClean && itemToClean instanceof Array){
-         return arr.filter(function (itemInArr) {
+         return arr.filter((itemInArr) => {
             return !itemToClean.includes(itemInArr);
          });
       }
 
-      if(itemToClean){
-         return arr.filter(function (itemInArr) {
+      if(itemToClean !== null){
+         return arr.filter((itemInArr) =>  {
             return itemInArr !== itemToClean;
          });
       }
@@ -557,12 +765,20 @@ const Tools = {
       );
    },
 
+   /**
+    * clean Javascript style Comments from the given string
+    * @from [stackoverflow](https://stackoverflow.com/a/62945875)
+    */
+   cleanComments(str){
+      return str.replace(Tools.REGEXP.JSComments, (m, g) => g ? "" : m);
+   },
 
    /**
     * remove terminal controll code from the string (e.g. color, hyperlink)
+    * @param {string} str
     */
-   cleanString(string){
-      return string.normalize().replace(Tools.REGEXP.ANSICode, '');
+   cleanString(str){
+      return str.normalize().replace(Tools.REGEXP.ANSICode, '');
    },
 
 
@@ -590,8 +806,8 @@ const Tools = {
          Object.freeze({
             type: 'generic.jp.full',
             regex: /[\u2E80-\u2FD5\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u3000-\u303f\u3041-\u3096\u30a0-\u30ff]/g,
-            from: [0x2e80, 0x3400, 0x4e00, 0xf900, 0x3000, 0x3041, 0x30a0],
-            to: [0x2fd5, 0x4db5, 0x9fcb, 0xfa6a, 0x303f, 0x3096, 0x30ff]
+            from: new Int16Array([0x2e80, 0x3400, 0x4e00, 0xf900, 0x3000, 0x3041, 0x30a0]),
+            to: new Int16Array([0x2fd5, 0x4db5, 0x9fcb, 0xfa6a, 0x303f, 0x3096, 0x30ff])
          }),
          Object.freeze({
             type: 'generic.cn.full',
@@ -605,7 +821,10 @@ const Tools = {
             from: 0xff5f,
             to: 0xff9f
          }),
-      ]
+      ],
+
+      AsyncFunction: (async () => {}).constructor,
+      GeneratorFunction: (function* (){}).constructor,
    }),
 
 
@@ -631,15 +850,89 @@ const Tools = {
    },
 
 
+   /**
+    * mesure the amount of time it takes from the start to the end of the label
+    * similar to `console.time()` but with more control
+    *
+    * **requires JavaScript runtime environment**
+    *
+    * @example
+    * // messure average time in a loop
+    * for(const match of myString.matchAll(/a/g)){
+         Tools.ConsoleTime.elipsedStart('push');
+         indexes.push(match.index);
+         Tools.ConsoleTime.elipsedEnd('push');
+      }
+
+      Tools.ConsoleTime.condense('push')?.print(); // -> push: 1.23ms
+    */
+   ConsoleTime: class ConsoleTime {
+      static lookbackLimit = 100;
+
+      static elipsedStart(label){
+         if(_global.consoleTimeInstances == null){
+            _global.consoleTimeInstances = new Map([
+               [label, [Tools.getProcessTime()]]
+            ]);
+            return;
+         }
+
+         if(!_global.consoleTimeInstances.has(label)){
+            _global.consoleTimeInstances.set(label, [Tools.getProcessTime()]);
+            return;
+         }
+
+         const elipsed = _global.consoleTimeInstances.get(label);
+         elipsed.unshift(Tools.getProcessTime());
+
+         if(this.lookbackLimit > 0&&elipsed.length >= this.lookbackLimit)
+            elipsed.pop();
+      }
+
+      static elipsedEnd(label){
+         if(!_global.consoleTimeInstances.has(label)) return;
+
+         const elipsed = _global.consoleTimeInstances.get(label);
+         const start = elipsed[0];
+         elipsed[0] = Tools.getProcessTime() - start;
+      }
+
+      static condense(label){
+         const elipsed = _global.consoleTimeInstances.get(label);
+
+         if(!elipsed) return null;
+
+         let avg = 0;
+         for(const eachTime of elipsed){
+            avg += eachTime;
+         }
+         avg /= elipsed.length;
+         _global.consoleTimeInstances.delete(label);
+
+         return {
+            print(){
+               console.log(label + ': ' + Tools.toShortNum(avg) + 's');
+            },
+            valueOf: () => avg,
+            toString: () => label + ': ' + Tools.toShortNum(avg) + 's',
+            value: avg
+         }
+      }
+   },
+
+
 
    DataScienceKit: {
       /**calculate how many times each unique elements
        * appears in the given array
        * @template T
        * @param {T[]|string} arr
-       * @returns {Map<T, number>} frequency of each unique elements
+       * @returns {Map<T|string, number>} frequency of each unique elements
        */
       frequencyOf(arr){
+         if(!arr||(typeof arr != 'string'&&!Tools.isArrayLike(arr)))
+            return new Map();
+
          const uniqueElems = [...new Set(arr)];
          let fqMap = new Map(
             uniqueElems.map(v => [v, 0])
@@ -755,7 +1048,7 @@ const Tools = {
        * @returns {number} length of the LCS string
        */
       LCSLength_of(arrA, arrB, comparator = (a, b) => a === b){
-         if(!(arrA?.length&&arrB?.length)) return [];
+         if(!(arrA?.length&&arrB?.length)) return 0;
 
          /**3d matrix:
           * row: representative of strA
@@ -1096,15 +1389,103 @@ const Tools = {
 
 
 
+   /**
+    * ## get the dimension of the given array
+    * @param {any} arr
+    * @param {'min'|'max'|'fixed'|'symmetric'} [mode='max'] function to determine the dimension
+    * as `min()`, `max()`, 'fixed' or 'symmetric'.
+    *
+    * this is because array might not have the same length for every dimension
+    * - `min()` will return the smallest length
+    * - `max()` will return the largest length
+    * - `'fixed'` will throw an error if any of arrays in any axis have diffrent length
+    * - `'symmetric'` calculate dimension by only traverse through the last array in each dimension (much faster compared to others. imagine multidimensional array as a cube, this will only traverse the edge of each axis),
+    * assuming that all arrays in each axis have the same length
+    * @returns {number[]} dimensions of the given array where each index represent the length in each axis
+    */
+   getDimensions(arr, mode = 'max'){
+      const dim = [];
+      const minmax = mode === 'min' ? Math.min : Math.max;
+      const lenStartValue = mode === 'min' ? Infinity: 0;
+      let currLen = lenStartValue;
+      let argsStack = [];
+      let callStackCount = 0;
+
+      if(!Tools.isArrayLike(arr)) return dim;
+      dim.push(arr.length);
+
+
+      if(mode === 'symmetric')
+         edgeTraverse(arr, 0);
+      else BFSTraverse(arr, 0, true);
+
+      return dim;
+
+
+
+      function edgeTraverse(arr, depth){
+         if(!Tools.isArrayLike(arr?.[dim[depth] - 1])) return;
+
+         dim.push(arr[dim[depth] - 1].length);
+         edgeTraverse(arr[dim[depth] - 1], depth + 1);
+      }
+
+
+      /**
+       * traverse through the tree-like multidimensional array in breadth-first-search
+       */
+      function BFSTraverse(arr, depth, doSummarize = false, position = []){
+         for(let i = 0; i < dim[depth]; i++){
+            if(!Tools.isArrayLike(arr[i])) continue;
+
+            // console.log(depth, i, currLen, arr[i]?.length, arr[i]);
+            if(arr[i].length != currLen){
+               if(mode === 'fixed'&&currLen !== lenStartValue){
+                  throw new Error(
+                     `Array length mismatched at depth ${depth + 1} position (${[...position, i].join(',')}):\nexpected length: ${currLen}\nactual length: ${arr[i].length}`
+                  );
+               }
+
+               currLen = minmax(currLen, arr[i].length);
+            }
+
+            argsStack.push([arr[i], depth + 1, false, [...position, i]]);
+         }
+
+         if(doSummarize&&currLen !== lenStartValue){
+            dim.push(currLen);
+            currLen = lenStartValue;
+
+            const _args = [...argsStack];
+            argsStack = [];
+            for(let i = 0; i < _args.length; i++){
+               if(i == _args.length - 1) _args[i][2] = true;
+
+               if(++callStackCount > 5000){
+                  queueMicrotask(() => {
+                     callStackCount = 0;
+                     BFSTraverse(..._args[i]);
+                  });
+                  continue;
+               }
+
+               BFSTraverse(..._args[i]);
+            }
+         }
+      }
+   },
+
+
+
    Err: class Err extends Error {
       /**## an easier to customize Error object
        * @param {string|Error|unknown} message error message
        * @param {string} name error name
-       * @param {number} code error code
+       * @param {number|string} code error code
        * @param {string} stack error stacktrace
        */
       constructor(message, name = null, code = null, stack = null){
-         if(message instanceof Error){
+         if(Tools.isError(message)){
             if(!name) name = message.name;
             if(!code) code = message.code;
             if(!stack) stack = message.stack;
@@ -1117,6 +1498,22 @@ const Tools = {
          if(stack) this.stack = stack;
       }
 
+      /**
+       * @typedef {object} Err_toStringOptions
+       * @property {boolean} [color=false] colorize the output
+       * @property {number|string} [defColor=undefined] default color, used for reseting the color
+       * without this, the will be reset all color and style to default
+       */
+      /**
+       * convert Error object to string
+       * @param {Err_toStringOptions} [options={}]
+       */
+      toString(options = {}){
+         if(!this||!Tools.isError(this)) return '[Error unknown]';
+
+         return Tools.Err.toString(this, options);
+      }
+
       /**## an easier to customize Error object
        * @param {string|Error|unknown} message error message
        * @param {string} name error name
@@ -1125,6 +1522,56 @@ const Tools = {
        */
       static from(message, name = null, code = null, stack = null){
          return new Tools.Err(message, name, code, stack);
+      }
+
+      // LINK: dkjl3n1 - description link
+      /**
+       * check if the given object is an Error or decendant of it
+       * @param {unknown|any} obj
+       */
+      static isError(obj){
+         if(obj instanceof Error) return true;
+         if(Error.prototype.isPrototypeOf(obj)) return true;
+
+         return typeof obj?.message == 'string' &&
+            typeof obj?.stack == 'string';
+      }
+
+
+      /**
+       * convert Error object to string
+       * @param {unknown|Error} err
+       * @param {Err_toStringOptions} [options={}]
+       */
+      static toString(err, options = {}){
+         const { color = false, defColor = undefined } = options;
+
+         let str = (color
+            ? Tools.ncc('Red') + 'ERROR' + Tools.ncc(defColor)
+            : 'ERROR') + ' Message: ';
+
+         if(color) str += Tools.ncc('Red') + (err?.message ?? '[unknown]') + Tools.ncc(defColor);
+         else str += err?.message ?? '[unknown]';
+
+         if(err?.name){
+            str += '\nName: ';
+            if(color) str += Tools.ncc('Red') + err.name + Tools.ncc(defColor);
+            else str += err.name;
+         }
+
+         if(err?.code){
+            str += '\nCode: ';
+            if(color) str += Tools.ncc('Yellow') + err.code + Tools.ncc(defColor);
+            else str += err.code;
+         }
+
+         if(err?.stack){
+            str += '\nStack: ';
+            if(color) str += Tools.ncc(0x555555) + err.stack + Tools.ncc(defColor);
+            else str += err.stack;
+         }
+
+         return str;
       }
    },
 
@@ -1140,7 +1587,7 @@ const Tools = {
 
 
 
-   /**similar to `string.length` but return actual length displayed in terminal.
+   /**similar to `string.length` but return actual length displayed in terminal (**Recxel** unit aka **Rec**tangular Pi**xel** where normal half-width chars are exactly 1 Recxel).
     * (size that will be displayed, not to be confused with the actual *length* of the string)
     * this is because some characters may take more than 1 character width
     * (e.g. emoji, full-width characters, etc.)
@@ -1178,14 +1625,16 @@ const Tools = {
 
 
    /**get an Array of matched index from `string.matchAll()`
-    * @param {IterableIterator<RegExpMatchArray>}matchArr
+    *
+    * **this function is RESOURCE INTENSIVE use it wisely**
+    * @param {IterableIterator<RegExpMatchArray>} matches
     * @returns {number[]}
     */
-   getMatchAllIndexes(matchArr){
-      if(!matchArr) return [];
+   getMatchAllIndexes(matches){
+      if(!matches) return [];
 
       let indexes = [];
-      for(const match of matchArr){
+      for(const match of matches){
          indexes.push(match.index);
       }
       return indexes;
@@ -1222,6 +1671,15 @@ const Tools = {
    },
 
 
+   /**
+    * get the current process time in milliseconds (nano-seconds precision)
+    *
+    * **this function requires JavaScript runtime environment**
+    */
+   getProcessTime(){
+      const hrt = process.hrtime();
+      return hrt[0] * 1000 + hrt[1] / 1000000;
+   },
 
    /**create Hyper link for terminal
     *
@@ -1370,7 +1828,7 @@ const Tools = {
     *   ipc.send('mymsgchannel', 'work done!');
     * }
     */
-   IPC: class {
+   IPC: class IPC {
       static Package = class Package {
          channel;
          content;
@@ -1407,20 +1865,31 @@ const Tools = {
        */
       #listeners = new Map;
       #proto;
-      #tagetAdd = 'localhost';
+      #defaultTimeout = 1000;
+      #isBinded = false;
+      peersAddress = 'localhost';
+      peersPort;
       /**the port this IPC is on or Worker object if using `nodeworker`
        * @type {number|Worker|@require('worker_threads').parentPort}
        */
-      port;
+      listenPort;
       get protocol(){ return this.#proto; };
 
+
+      /**
+       * @typedef {object} IPCOptions
+       * @property {number} [peersPort] default port when sending message
+       * @property {string} [peersAddress] default address when sending message
+       * @property {number|Worker} [listenPort] default port when listening for message
+       * @property {number} [timeout] default timeout for waiting for response
+       */
       // LINK: dn4kas
       /**## Inter-process Communication
        * IPC which is capable of tranfering most standard Javascript Objects
        *
        * ### Important! this class may requires *`dgram`* or *`worker_threads`* (NodeJS module) that will be imported upon calling
        * @param {'nodeworker'|'udp4'|'udp6'} protocol **data transfer protocol** **`nodeworker`** using the build-in NodeJS `worker_threads` module, **`udp4`** or **`udp6`** using the build-in NodeJS `dgram` module
-       * @param {number|Worker|require('worker_threads').parentPort} port port to listen on (if `protocol` is `nodeworker` this will be the `worker` or `parentPort` object)
+       * @param {Worker|IPCOptions} settings IPC options (if `protocol` is `nodeworker` this will be the `worker` or `parentPort` object)
        * if `protocol` is `nodeworker` this argument can be omitted and will create a connection to the main thread if has any.
        * @example
        * // using the dgram module
@@ -1454,8 +1923,15 @@ const Tools = {
        *   ipc.send('mymsgchannel', 'work done!');
        * }
        */
-      constructor(protocol = 'udp4', port = null){
+      constructor(protocol = 'udp4', settings = {}){
          if(!onJSRuntime) throw new Error('IPC is only available on JSRuntime, due to the use of Node modules');
+
+         const {
+            peersPort = null,
+            peersAddress = null,
+            listenPort = null,
+            timeout = 1000
+         } = (typeof settings == 'number'? { listenPort: settings }: settings); // <- for backward compatibility
 
          if(protocol != 'nodeworker'&&protocol != 'udp4'&&protocol != 'udp6')
             throw new Error(`protocol must be 'nodeworker', 'udp4' or 'udp6' instead given '${protocol}'`);
@@ -1470,12 +1946,7 @@ const Tools = {
                throw new Error(`module 'worker_threads' not loaded use 'Tools._modules.worker_threads = require("worker_threads")' to load it`);
             }
 
-            if(
-               !(port instanceof Tools._modules.worker_threads.Worker)&&
-               port !== Tools._modules.worker_threads.parentPort&&
-               port != null
-            ) throw new Error(`port must be a type of 'Worker' or a 'parentPort' instead given '${typeof port}'`);
-            if(!port){
+            if(!listenPort){
                if(Tools._modules.worker_threads.isMainThread)
                   throw new Error('when using `nodeworker` protocol, `port` must be provided if on the main thread');
                this.#socket = Tools._modules.worker_threads.parentPort;
@@ -1483,29 +1954,50 @@ const Tools = {
                return;
             }
 
-            this.#socket = port;
+            if(
+               !(listenPort instanceof Tools._modules.worker_threads.Worker)&&
+               listenPort !== Tools._modules.worker_threads.parentPort&&
+               listenPort != null
+            ) throw new Error(`port must be a type of 'Worker' or a 'parentPort' instead given '${typeof listenPort}'`);
+
+            this.#socket = listenPort;
             this.#init();
             return;
          }
 
-         this.port = port;
+         if(!peersPort) throw new Error('peersPort must be provided for `udp4` or `udp6` protocol');
+
+         this.#defaultTimeout = timeout;
+         this.listenPort = listenPort;
+         this.peersAddress = peersAddress;
+         this.peersPort = peersPort;
          this.#socket = Tools._modules.dgram.createSocket(protocol);
          this.#init();
       }
 
       /**
-       * @returns {Promise<number|undefined>} port number if `protocol` is `udp4` or `udp6`
+       * @returns {Promise<number|void>} port number if `protocol` is `udp4` or `udp6`
        */
       async #init(){
-         return new Promise(resolve => {
-            this.#socket.on('message', this.#handleIncomePackage);
+         this.#socket.on('message', this.#handleIncomePackage);
 
-            if(this.protocol == 'nodeworker') resolve();
+         if(this.protocol == 'nodeworker') return;
+         if(!this.listenPort) return;
 
-            this.#socket.bind(this.port, port => {
-               resolve(this.port = port);
-            });
-         });
+         try {
+            this.#socket.bind(this.listenPort);
+            this.#isBinded = true;
+
+         } catch(err) {
+            switch(err.code){
+               case 'ERR_SOCKET_BAD_PORT':
+                  throw new Tools.Err(`Tools.IPC: port ${this.listenPort} is not valid`, 'ERR_SOCKET_BAD_PORT', err.code, err.stack);
+               case 'EADDRINUSE':
+                  throw new Tools.Err(`Tools.IPC: port ${this.listenPort} is already in use`, 'EADDRINUSE', err.code, err.stack);
+               default:
+                  throw Tools.Err.from(err).message = `Tools.IPC: failed to bind port ${this.listenPort} ` + err.message;
+            }
+         }
       }
 
       /**bind sender to a specific address
@@ -1513,9 +2005,13 @@ const Tools = {
        * this allows message to be sent across devices
        * @param {string} address IPv4 address separated by dots
        */
-      bind(address){
+      bind(address, port){
          if(this.protocol == 'nodeworker') return;
-         this.#tagetAdd = address;
+         this.peersAddress = address;
+         this.listenPort = port;
+
+         if(!this.#isBinded) this.#init();
+         return this;
       }
 
 
@@ -1551,20 +2047,14 @@ const Tools = {
                }, Tools.JSONReplacer)
             );
 
-            // const _package = Buffer.from(
-            //    JSON.stringify({
-            //       channel,
-            //       contents
-            //    }, Tools.JSONReplacer)
-            // );
-
             if(this.protocol == 'nodeworker'){
                this.#socket.postMessage(_package);
                resolve();
                return;
             }
 
-            this.#socket.send(_package, this.port, this.#tagetAdd, (err, bytes) => {
+
+            this.#socket.send(_package, this.peersPort, this.peersAddress, (err, bytes) => {
                if(err) reject(err);
                resolve();
             });
@@ -1588,6 +2078,7 @@ const Tools = {
          listener.push(
             new Tools.IPC.Listener(0, callback)
          );
+         return this;
       }
 
       /**listen on the given channel for messages
@@ -1609,6 +2100,7 @@ const Tools = {
          listener.push(
             new Tools.IPC.Listener(1, callback)
          );
+         return this;
       }
 
       /**
@@ -1689,6 +2181,7 @@ const Tools = {
          }
 
          this.on(channel, handleAsk);
+         return this;
       }
 
       /**
@@ -1704,16 +2197,16 @@ const Tools = {
          /**
           * @type {Package}
           */
-         const _package = this.protocol == 'nodeworker'?
-            {
+         const _package = this.protocol == 'nodeworker'
+            ? {
                channel: rawPackage.channel,
                contents: rawPackage.contents.map(c => {
                   if(typeof c == 'string'&&c.startsWith('@JSON:'))
                      return JSON.parse(c.slice(6), Tools.JSONReviver);
                   return c;
                })
-            }:
-            JSON.parse(rawPackage.toString(), Tools.JSONReviver);
+            }
+            : JSON.parse(rawPackage.toString(), Tools.JSONReviver);
 
          let listener = this.#listeners.get(_package.channel);
          if(!listener) return;
@@ -1725,6 +2218,95 @@ const Tools = {
       }
    },
 
+
+   /**
+    * check if the given object can be used like an `Array` (that doesn't mean it is an `Array`),
+    * this includes but not limited to `Array`, `TypedArray`, `NodeList`, `Buffer` and so on...
+    *
+    * basically a more relaxed version of `Array.isArray()`
+    *
+    * Iterable object that doesn't considered as an array:
+    * - `string`
+    * - `ArrayBuffer`
+    * - `Map`
+    * - `Set`
+    *
+    * @param {*} obj object to check
+    * @returns {boolean}
+    * @from [stackoverflow](https://stackoverflow.com/a/24048615)
+    */
+   isArrayLike(obj) {
+      const len = obj?.length;
+
+      return (
+         Array.isArray(obj) ||
+         (!!obj && len != null &&
+            typeof obj === "object" &&
+            typeof len === "number" &&
+            (len === 0 ||
+               (len > 0 &&
+               (len - 1) in obj)
+            )
+         )
+      );
+   },
+
+   /**
+    * check if the given object is an Arrow function
+    * @returns {boolean}
+    */
+   isArrowFunction(obj){
+      if(typeof obj !== 'function') return false;
+
+      if(obj.hasOwnProperty('prototype')) return false;
+
+      try {
+         "use strict";
+         obj['arguments'];
+         return false;
+      }
+      catch {};
+
+      return obj.toString().slice(0, 20).includes('=>');
+   },
+
+
+   /**
+    * check if the given object is an async function
+    */
+   isAsyncFunction(obj){
+      if(typeof obj !== 'function') return false;
+
+      if(obj.constructor?.name === 'AsyncFunction') return true;
+
+      /**
+       * @from [stackoverflow](https://stackoverflow.com/a/38510353)
+       * prevent *false positive* result for transpiled function
+       */
+      return (
+         obj instanceof Tools.CONSTS.AsyncFunction &&
+         Tools.CONSTS.AsyncFunction !== Function &&
+         Tools.CONSTS.AsyncFunction !== Tools.CONSTS.GeneratorFunction
+      ) === true;
+   },
+
+
+   /**
+    * check if the given object is a class
+    * @param {any} obj
+    * @example
+    * class MyClass {}
+    * console.log(Tools.isClass(MyClass)); // true
+    *
+    * const MyFunc = function() {};
+    * console.log(Tools.isClass(MyFunc)); // false
+    */
+   isClass: (obj) => {
+      if(typeof obj !== 'function') return false;
+      const str = obj.toString();
+
+      return str.startsWith('class');
+   },
 
 
    /**this function will return **true** if
@@ -1738,13 +2320,23 @@ const Tools = {
 
    /**return True if the given Object is an array with nothing inside
     */
-   isEmptyArray: obj => (obj instanceof Array)&&!obj.length,
+   isEmptyArray: obj => Tools.isArrayLike(obj)&&!obj.length,
 
 
    /**return True if the given Object is a standard Object (`{}`) with no property
     */
    isEmptyObject: obj =>
-      !(obj instanceof Array)&&(obj instanceof Object)&&!Tools.propertiesCount(obj),
+      !Tools.isArrayLike(obj)&&(obj instanceof Object)&&!Tools.propertiesCount(obj),
+
+
+   // LINK: dkjl3n1 - description link
+   /**
+    * check if the given object is an Error or decendant of it
+    * @param {unknown|any} obj
+    */
+   isError(obj){
+      return Tools.Err.isError(obj);
+   },
 
 
    /**check if the given path contains is valid
@@ -1767,7 +2359,7 @@ const Tools = {
     * @template T
     * @param {T} value
     * @param {string} key
-    * @returns {T}
+    * @returns {({ '@dataType': string, '@value': string|any[] })|T}
     * @example
     * const objWithNonParsable = {
     *    map: new Map([[2, 'two'], [3, 'three']]),
@@ -1824,7 +2416,7 @@ const Tools = {
     * @template T
     * @param {T} value
     * @param {string} key
-    * @returns {T}
+    * @returns {T|BigInt|Map<any, any>|Set<any>}
     * @example
     * const objWithNonParsable = {
     *    map: new Map([[2, 'two'], [3, 'three']]),
@@ -1922,7 +2514,7 @@ const Tools = {
 
 
    /**return type of content judging only from file Extension
-    * @param {string}fileExt
+    * @param {string} fileName
     * @returns `'image'|'text'|'binary'|'media'|null`
     */
    fileTypeOf(fileName){
@@ -1977,7 +2569,9 @@ const Tools = {
          fileExt == 'mov'||
          fileExt == 'wav'||
          fileExt == 'gif'||
-         fileExt == 'webm'
+         fileExt == 'webm'||
+         fileExt == 'avi'||
+         fileExt == 'ogg'
       )
 
       if(images) return 'image';
@@ -2009,7 +2603,7 @@ const Tools = {
        * @property {number} hr
        * @property {number} min
        * @property {number} sec
-       * @property {string} ms
+       * @property {number} ms
        * @property {() => string} toString
        * @property {() => string} modern to modern time string
        */
@@ -2087,7 +2681,7 @@ const Tools = {
 
    // LINK: @ndwk2s description
    /**
-    * @typedef {{[key: string]: TValue}} GenericObject
+    * @typedef {{[key: string]: TValue}|{}} GenericObject
     * @template TValue
     */
    /**
@@ -2097,7 +2691,7 @@ const Tools = {
     *
     * callback function should return an Object with `key` and `value` property
     * , undefined to delete the pair or **`null`** to keep the pair as is
-    * @template TVal, TKey
+    * @template TKey, TVal
     * @param {Map<TKey, TVal>|GenericObject<TVal>} obj object to map
     * @param {(key: TKey|string, value: TVal, obj: Map<TKey, TVal>|GenericObject<TVal>) => {key: any, value: any}|undefined|null} callback
     * Parameters:
@@ -2492,8 +3086,7 @@ const Tools = {
        * @returns {number}
        */
       sum: (...Xs) => {
-         Xs = Xs.flat(5);
-         return Xs.reduce((a, b) => a + b, 0);
+         return Xs.flat(5).reduce((a, b) => a + b, 0);
       },
 
       /**Convert from Cartesian to Polar coordinates where **Theta** (t) units is specified by `unit`
@@ -2563,9 +3156,12 @@ const Tools = {
    },
 
 
+   /**
+    * @typedef {'Reset'|'Bright'|'Dim'|'Italic'|'Blink'|'Invert'|'Hidden'|'Black'|'Red'|'Green'|'Yellow'|'Blue'|'Magenta'|'Cyan'|'White'|'BgBlack'|'BgRed'|'BgGreen'|'BgYellow'|'BgBlue'|'BgMagenta'|'BgCyan'|'BgWhite'|number|string} NCCColorOptions
+    */
    /**(**Node Console Color**) return the Node.js Console Text formats, use this format to change
     * how Console Text looks.
-    * @param {'Reset'|'Bright'|'Dim'|'Italic'|'Blink'|'Invert'|'Hidden'|'Black'|'Red'|'Green'|'Yellow'|'Blue'|'Magenta'|'Cyan'|'White'|'BgBlack'|'BgRed'|'BgGreen'|'BgYellow'|'BgBlue'|'BgMagenta'|'BgCyan'|'BgWhite'|number}color
+    * @param {NCCColorOptions}color
     * **true color (24Bit)**, **preset (8Bit) color** or **color format** of choice (if omit: 'Reset', invlid: 'white')
     * @example
     * format available: `Reset, Bright, Dim, Italic, Blink, Invert, Hidden`
@@ -2604,7 +3200,7 @@ const Tools = {
             return `\x1b[${mode == 'bg'?'4':'3'}8;2;${rgb.r};${rgb.g};${rgb.b}m`;
          }
 
-         color = (mode == 'bg'?'bg':'') + _8bitColorFromRGB(rbg);
+         color = (mode == 'bg'?'bg':'') + _8bitColorFromRGB(rgb);
       }
 
       color = color.toLocaleLowerCase();
@@ -2645,6 +3241,7 @@ const Tools = {
          const b = rgb.b > 127;
 
          // switch how much color is being mixed in
+         // @ts-expect-error adding boolean with another boolean
          switch(r + g + b){
             case 3: return 'white';
             case 0: return 'black';
@@ -2683,6 +3280,14 @@ const Tools = {
       return nearestIndex;
    },
 
+   /**
+    * get the value of an object at the given index
+    * @param {number} index index of the value
+    * @param {object} obj object to get the value from
+    */
+   objValueAt(obj, index){
+      return obj[Object.keys(obj).at(index)];
+   },
 
 
    // LINK: @ndwk2s description
@@ -2790,7 +3395,7 @@ const Tools = {
       // age: Arg { value: 34, index: 6, type: 'int' },
       // gender: Arg { value: 'f', index: -1, type: 'choice' } }
     * @param {string[]} args commandline args
-    * @param {Object} params Paramiter rules object
+    * @param {object} template Paramiter rules object
     * @param {boolean} caseSensitive
     * @returns {ParseArgs}
     */
@@ -2921,6 +3526,7 @@ const Tools = {
     * @returns Boolean data type
     */
    parseBool(stringBool, strictMode = false){
+      if(typeof stringBool == 'boolean') return stringBool;
       stringBool = stringBool.toLowerCase();
       const boolRes = (stringBool == 'true'?true:false);
 
@@ -2934,9 +3540,9 @@ const Tools = {
 
    /**parse configuration file in UTF-8 encoding to a Javascript Object
     * @param {string}ConfigString configuration file content
-    * @param {function(any, string, any): any} [JSONReviver=null] JSON reviver function, to parse JSON Object in side the config file
-    * @param {{ignoreGroups: boolean}} [options]
-    * @returns {Object} configuration in Javascript Object
+    * @param {function(this: any, string, any): any} [JSONReviver=null] JSON reviver function, to parse JSON Object in side the config file
+    * @param {{ignoreGroups?: boolean}} [options]
+    * @returns {object} configuration in Javascript Object
     * @example //in main file
     * const fs = require('fs');
     *
@@ -3024,16 +3630,17 @@ const Tools = {
 
          // Parse JSON config
          if(inJson){
-            if(jsonEnd(rowIndex, rows)){
-               inJson = false;
-               if(activeGroup)
-                  configObj[activeGroup][jsonVar_key] = JSON.parse(json_str, JSONReviver);
-               else
-                  configObj[jsonVar_key] = JSON.parse(json_str, JSONReviver);
-            }else{
-               json_str += rows[rowIndex];
-               continue;
-            }
+            json_str += rows[rowIndex];
+
+            // continue to next row if this row isn't the end of JSON config
+            if(!jsonEnd(rowIndex, rows)) continue;
+
+            inJson = false;
+            if(activeGroup)
+               configObj[activeGroup][jsonVar_key] = JSON.parse(json_str, JSONReviver);
+            else
+               configObj[jsonVar_key] = JSON.parse(json_str, JSONReviver);
+            continue;
          }
 
 
@@ -3101,7 +3708,7 @@ const Tools = {
             if(!eachPair[1]) throw new Error(`Tools.parseConfig(): invalid syntax, expected expresion after '='.  at \`${eachRow}\``);
          }
 
-         // if value isn't wrapped in quotes: tries to parse it
+         // if value isn't wrapped in quotes: try to parse it
          if(activeGroup)
             configObj[activeGroup][eachPair[0]] = valueWrappedInQ? eachPair[1]: parseValue(eachPair[1]);
          else
@@ -3151,15 +3758,15 @@ const Tools = {
    },
 
 
-   /**this function act as Passthrough (man in the Middle), it **return the given value**
-    * and also pass that same value to the callback function
+   /**this function act as Passthrough (man in the Middle), **return the given value**
+    * and pass that same value to the callback function
     * @example
     * // use case
     * let myNumber = pass(getNumber()); // print the return value of `getNumber()` and pass it to `mynumber`
     *
     * dostuff(pass(myNumber, doOtherStuff)); // pass `myNumber` to `dostuff()` and `doOtherStuff()`
     * @template T
-    * @param {Function} callback
+    * @param {(arg: T) => void} callback
     * @param {T} value
     * @returns {T} the given value
     */
@@ -3313,7 +3920,7 @@ const Tools = {
 
    /**
     * # redexOf (indexOf + RexExp + lastIndexOf)
-    * ### " I have a `Reg(Exp)`, I have an `indexOf`... Ahhh `redexOf`"* ...any further explanation needed?
+    * " I have a `Reg(Exp)`, I have an `indexOf`... Ahhh `redexOf`"* ...any further explanation needed?
     *  redexOf is an indexOf but with `RegExp` supported
     *
     * spoiler alert: it also works as `String.lastIndexOf()` if given negative position
@@ -3385,9 +3992,9 @@ const Tools = {
        * match any ANSI code
        *
        * if hyperlinks are found, will only match beginning and the end of a hyperlink escape sequence,
-       * along with the URL but kept the Label untouched.
+       * along with the Label but kept the URL untouched.
        */
-      ANSICode: /\x1b\[\d{1,3}(?:;\d{1,3})*m|\x1b\]8;;[^\x07]+\x07|(?<=\x07[\w\s]+)\x07\]8;;\x07/g,
+      ANSICode: /\x1b\[\d{1,3}(?:;\d{1,3})*m|\x1b\]8;;|(?<=[^\x07]+)\x07[^\x07]+\]8;;\x07/g,
       /**
        * ## match any single Emoji Unicode
        * Created by Wiktor Stribiżew, Sep 9, 2021
@@ -3412,22 +4019,30 @@ const Tools = {
        * @from [stribizhev/Emojis](https://github.com/stribizhev/Emojis/tree/main)
        */
       EmojiEachGroup: new RegExp("(?:" + EMOJI_MATCHER_TOKEN + ")+", 'g'),
-
-      IniGroups: /^[\t ]*\[(.+)\][\t ]*$/gm
+      /**
+       * match all Groups in INI file
+       */
+      IniGroups: /^[\t ]*\[(.+)\][\t ]*$/gm,
+      /**
+       * match all JS style comments
+       */
+      JSComments: /\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g,
    }),
 
    /**
     * resolve the Environment Variable in the given string
     *
     * default Environment Variable format to CMD (`%ENV_NAME%`)
+    *
+    * #### Note: `envRegex` needs a capture group otherwise it will not work!
     * @param {string} str
-    * @param {RegExp} envRegex CMD Environment Variable format
+    * @param {RegExp} envRegex Environment Variable format
     */
-   resolveNodeEnv(str, envRegex = /%\w+%/g){
-      return str.replace(envRegex, (env) => {
-         const envName = env.slice(1, -1);
+   resolveNodeEnv(str, envRegex = /%(\w+)%/g){
+      return str.replace(envRegex, (matchStr, env) => {
+         const envName = env;
          if(process.env[envName] == undefined)
-            return env;
+            return matchStr;
          return process.env[envName];
       });
    },
@@ -3449,6 +4064,7 @@ const Tools = {
        */
       constructor(limit = 10e9, noWarning = false){
          this.limit = limit;
+         this.noWarning = noWarning;
       }
 
       /**always return `true` if the amount of time this value gets read
@@ -3681,13 +4297,13 @@ const Tools = {
 
    /**
     * @typedef {object} StringifyConfigOptions
-    * @property {string[]|undefined} ignoreList list of keys to ignore
-    * @property {boolean|undefined} minify minify the JSON output
-    * @property {((key: any, value: any) => {})|undefined} replacer JSON replacer
-    * @property {'merge'|'replace'|undefined} mode write mode, 'merge' will merge the new config with the old one, 'replace' will replace the old config with the new one (default to 'merge')
+    * @property {string[]|undefined} [ignoreList] list of keys to ignore
+    * @property {boolean|undefined} [minify] minify the JSON output
+    * @property {((key: any, value: any) => {})|undefined} [replacer] JSON replacer
+    * @property {'merge'|'replace'|undefined} [mode] write mode, 'merge' will merge the new config with the old one, 'replace' will replace the old config with the new one (default to 'merge')
     * @property {boolean|undefined} [useIniGroup=false] use ini groupping, use keys in the first level as groupName
-    * @property {boolean|undefined} alwaysWrapStrInQuotes always wrap string in quotes even if it's not required (doesn't have space, special char, etc.)
-    * @property {string|undefined} oldConfigStr the old config string to merge with (for mode 'merge' only)
+    * @property {boolean|undefined} [alwaysWrapStrInQuotes] always wrap string in quotes even if it's not required (doesn't have space, special char, etc.)
+    * @property {string|undefined} [oldConfigStr] the old config string to merge with (for mode 'merge' only)
     */
    /**
     * stringify configuration object to a config string which can be saved to a file later.
@@ -3735,8 +4351,8 @@ const Tools = {
 
       function write(key, valueObj, group){
          let strValue = '';
-         if(typeof valueObj[key] == 'object')
-            strValue = `${JSON.stringify(valueObj[key], replacer, minify?null:3)};\n`;
+         if(valueObj[key] != null&&typeof valueObj[key] == 'object')
+            strValue = `${JSON.stringify(valueObj[key], replacer, minify?null:3)}\n`;
          else{
             if(typeof valueObj[key] == 'string'){
                if(alwaysWrapStrInQuotes||/\s|[\{\[\}\]]/.test(valueObj[key]))
@@ -3760,14 +4376,21 @@ const Tools = {
          }
 
          if(keyIndex == -1){
+            const pair = minify? `${key}=${strValue}\n`: `${key} = ${strValue}\n`;
+
             if(useIniGroup){
                if(cantFindGroup){
-                  savedConfig += `${key} = ${strValue}\n`;
+                  savedConfig += pair;
                }else{
-                  savedConfig = Tools.strSplice(savedConfig, existGroupIndex + group.length + 3, 0, `${key} = ${strValue}\n`);
+                  savedConfig = Tools.strSplice(
+                     savedConfig,
+                     existGroupIndex + group.length + 3,
+                     0,
+                     pair
+                  );
                }
 
-            }else savedConfig += `${key} = ${strValue}\n`;
+            }else savedConfig += pair;
             return;
          }
 
@@ -3818,7 +4441,30 @@ const Tools = {
          }
 
          // console.log(keyIndex, valueStart, valueEnd, `'${savedConfig.slice(valueStart, valueEnd)}'`);
-         savedConfig = Tools.strSplice(savedConfig, valueStart, valueEnd - valueStart, ' ' + strValue);
+         savedConfig = Tools.strSplice(
+            savedConfig,
+            valueStart,
+            valueEnd - valueStart,
+            (minify?'':' ') + strValue
+         );
+
+         {
+            /**
+             * check and adjust spacing behind `=` if each pair
+             * saveConfig[valueStart] is the first char after `=` (whitespace included)
+             *
+             * if keyEnd result in 0, it means there is no space behind `=`
+             * value less than 0 is the absolute number of space behind `=` (spaceCount = abs(keyEnd))
+             */
+            let keyEnd = 0;
+            while(savedConfig[valueStart + (keyEnd - 2)] == ' ')
+               keyEnd--;
+
+            if(minify&&keyEnd < 0) // if minify but has space behind `=`
+               savedConfig = Tools.strSplice(savedConfig, valueStart + keyEnd - 1, -keyEnd, '');
+            else if(!minify&&keyEnd !== -1) // if not minify but space behind `=` isn't exacly 1
+               savedConfig = Tools.strSplice(savedConfig, valueStart + keyEnd - 1, -keyEnd, ' ');
+         }
       }
 
       function findJSONEndIndex(valueStart){
@@ -3933,7 +4579,7 @@ const Tools = {
          case 'end':
             return Tools.strSlice(str, 0, leftoverAmu) + "...";
          case 'start':
-            return "..." + Tools.strSlice(str, leftoverAmu);
+            return "..." + Tools.strSlice(str, strLen - leftoverAmu);
       }
    },
 
@@ -3942,8 +4588,8 @@ const Tools = {
     * slice string, similar to `String.slice()` but with string
     * @param {string} str string to slice
     * @param {number} start start index
-    * @param {number} [end] end index
-    * @param {number} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
+    * @param {number?} [end] end index
+    * @param {number?} [redundancyLv=0] complexity of how string width (size that will be displayed, not to be confused with the actual *length* of the string) is calculated (suports `-1`: none, `0`:  ANSI code, `1`: fullwidth chars, `2`: Emoji)
     */
    strSlice(str, start, end, redundancyLv = 0){
       let ANSIIndexs = [...str.matchAll(Tools.REGEXP.ANSICode)]
@@ -3988,8 +4634,11 @@ const Tools = {
       if(index < str.length * -1) index = 0; // prevent negative index out of bounds
 
       if(strToInsert){
-         return str.slice(0, index) + strToInsert + (index < 0&&removeCount + index >= 0?'':str.slice(index + removeCount));
-      }else return str.slice(0, index) + (index < 0&&removeCount + index >= 0?'':str.slice(index + removeCount));
+         return str.slice(0, index) +
+            strToInsert +
+            (index < 0&&removeCount + index >= 0?'':str.slice(index + removeCount));
+      }else return str.slice(0, index) +
+         (index < 0&&removeCount + index >= 0?'':str.slice(index + removeCount));
    },
 
 
@@ -4011,7 +4660,7 @@ const Tools = {
 
 
    /**
-    * @typedef {Object} strWrapOptions
+    * @typedef {object} strWrapOptions
     * @property {string|number} [indent=''] the string to put in front of each line
     *
     * if `number` is given, will put WhiteSpace with that length instead
@@ -4035,7 +4684,7 @@ const Tools = {
    strWrap(str, maxLineLength, options = {}){
       if(!str) return '';
 
-      const {
+      let {
          indent = '',
          firstIndent = '',
          mode = 'softboundery',
@@ -4047,21 +4696,25 @@ const Tools = {
       const HardSep_reg = Tools.REGEXP.HardWrapSeperators;
 
       const innerBound = maxLineLength * 0.67;
-      str = str.toString().split('\n');
       if(typeof firstIndent == 'number')
          firstIndent = ''.padEnd(firstIndent, ' ');
       if(typeof indent == 'number')
          indent = ''.padEnd(indent, ' ');
 
-      if(firstIndent) content += firstIndent;
-      for(let eachLine of str){
+      let indexOffset = 0;
+      for(let eachLine of str.split('\n')){
+         const allIndex = Tools.getMatchAllIndexes(eachLine.matchAll(SoftSep_reg));
+
          while(Tools.ex_length(eachLine, redundancyLv) > maxLineLength){
-            const indexesOfSep = Tools.getMatchAllIndexes(eachLine.matchAll(SoftSep_reg))
+            const indexesOfSep = allIndex.map(v => v - indexOffset)
                .filter(v => v >= innerBound);
             let indexOfSep = indexesOfSep[0] ?? -1;
 
             if(indent){
-               if(firstIndent == '') firstIndent = null;
+               if(firstIndent){
+                  content += firstIndent;
+                  firstIndent = null;
+               }
                else content += indent;
             }
 
@@ -4069,6 +4722,7 @@ const Tools = {
                if(indexOfSep == -1){
                   const indexesOfHardSep = Tools.getMatchAllIndexes(eachLine.matchAll(HardSep_reg))
                      .filter(v => v >= innerBound);
+
                   indexOfSep = getSepIndex(indexesOfHardSep, 0) ?? maxLineLength;
                }else indexOfSep = getSepIndex(indexesOfSep, 0);
 
@@ -4077,10 +4731,14 @@ const Tools = {
 
             content += eachLine.substring(0, indexOfSep).concat('\n');
             eachLine = eachLine.substring(indexOfSep);
+            indexOffset += indexOfSep;
          }
 
          if(indent){
-            if(firstIndent == '') firstIndent = null;
+            if(firstIndent){
+               content += firstIndent;
+               firstIndent = null;
+            }
             else content += indent;
          }
          content += eachLine.concat('\n');
@@ -4101,6 +4759,8 @@ const Tools = {
     * @returns {number} 0: no color support, 1: 8bit color support, 2: 256 color support, 3: 16bit color support
     */
    supportsColor(stream = process?.stdout) {
+      if(!onJSRuntime) return 3;
+
       if (Tools.CheckCache.forceColor === false) {
          return 0;
       }
@@ -4196,6 +4856,8 @@ const Tools = {
     * from npm package: [supports-hyperlinks](https://www.npmjs.com/package/supports-hyperlinks)
     */
    supportsHyperlink(stream = process?.stdout, test = false) {
+      if(!onJSRuntime) return true;
+
       if(test) console.log(`Terminal Support Hyperlink Test: (result of last check is the test result)`);
 
       if(test) console.log(`1. has process.env: ${!!process.env}`);
@@ -4346,7 +5008,7 @@ const Tools = {
       /**return the closing version of a given Bracket
        */
       function closeBracket(brack){
-         return string.fromCharCode(
+         return String.fromCharCode(
             brack.charCodeAt(0) + (brack[0] == '('? 1 :2)
          );
       }
@@ -4359,7 +5021,7 @@ const Tools = {
        */
       time;
       /**this also control how often should timer do the checking
-       * @type {'ms','s','m'}
+       * @type {'ms'|'s'|'m'}
        */
       resolution;
       isRunning = false;
@@ -4376,7 +5038,7 @@ const Tools = {
        *
        * however, this can varies
        * @param {number} time start time
-       * @param {'ms','s','m'} resolution
+       * @param {'ms'|'s'|'m'} resolution
        */
       constructor(time, resolution = 'ms'){
          this.maxTime = this.time = time;
@@ -4538,14 +5200,115 @@ const Tools = {
       }
    },
 
+   Tracer: class Tracer {
+      /** Set this to false to disable logging
+      */
+      liveLog = true;
+      /**
+       * log is a string that will be appended to with each call to a function that has been logged.
+       */
+      log = '';
+      startTime;
+      enableLogging = false;
+      recursive = false;
+
+      constructor(){
+         this.startTime = new Date();
+      }
+
+      /**
+       * Gets a function that when called will log information about itself if logging is turned on.
+       *
+       * @param func The function to add logging to.
+       * @param name The name of the function.
+       *
+       * @return A function that will perform logging and then call the function.
+       */
+      createTracker = function(func, name, tracer) {
+         const limit = (str, limit) => {
+            const strLen = str.length;
+
+            if(strLen <= limit) return str;
+            // the length of str that won't be removed
+            const leftoverAmu = strLen - (strLen - limit) - 3;
+            const haft_loa = (leftoverAmu >> 1);
+            return str.slice(0, haft_loa) + "..." + str.slice(strLen - haft_loa + 1);
+         }
+
+
+         return function() {
+            if(!tracer.enableLogging)
+               return func.apply(this, arguments);
+
+            let returnValue = func.apply(this, arguments) ?? 'void';
+            let logText = '[' + Tools.jsTime.howLong(tracer.startTime) + '] ' + name + '(';
+
+            for(let i = 0; i < arguments.length; i++) {
+               if (i > 0) {
+                  logText += ', ';
+               }
+               const stringifiedArg = Tools.yuString(arguments[i]);
+
+               logText += stringifiedArg.trim().length
+                  ? limit(stringifiedArg, 70)
+                  : `"${stringifiedArg}"`;
+            }
+
+            if(returnValue === 'void') logText += ')';
+            else logText += '): ' + limit(Tools.yuString(returnValue), 70);
+            tracer.log += logText + '\n';
+
+            if(tracer.liveLog)
+               console.log(logText);
+
+            return returnValue === 'void'? undefined: returnValue;
+         }
+      };
+
+      /**
+       * After this is called, all direct children of the provided namespace object that are
+       * functions will log their name as well as the values of the parameters passed in.
+       *
+       * @param namespaceObject The object whose child functions you'd like to add logging to.
+       */
+      attachTracer(namespaceObject, parentName = ''){
+         if(parentName.length > 100) return this;
+
+         if(typeof namespaceObject !== 'object')
+            return this;
+
+         for(let name of Object.getOwnPropertyNames(namespaceObject)){
+            let potentialFunction = namespaceObject[name];
+
+            // console.log('Tracing: ' + parentName + name);
+            if(Object.prototype.toString.call(potentialFunction) === '[object Function]'){
+               if(!Tools.isClass(potentialFunction)){
+                  namespaceObject[name] = this.createTracker(potentialFunction, parentName + name, this);
+               }
+
+
+               if(this.recursive&&Tools.propertiesCount(potentialFunction) > 0){
+                  for(const protoName of Object.getOwnPropertyNames(potentialFunction)){
+                     const protoFunction = potentialFunction[protoName];
+
+                     return this.attachTracer(protoFunction, parentName + name + '.');
+                  }
+               }
+            }
+         }
+         return this;
+      };
+   },
+
+
    /**
     * @typedef {Object} WriteConfigOptions
-    * @property {string[]|undefined} ignoreList list of keys to ignore
-    * @property {boolean|undefined} minify minify the JSON output
-    * @property {((key: any, value: any) => {})|undefined} replacer JSON replacer
-    * @property {'merge'|'replace'|undefined} mode write mode, 'merge' will merge the new config with the old one, 'replace' will replace the old config with the new one (default to 'merge')
+    * @property {string[]|undefined} [ignoreList] list of keys to ignore
+    * @property {boolean|undefined} [minify] minify the JSON output
+    * @property {((key: any, value: any) => {})|undefined} [replacer] JSON replacer
+    * @property {'merge'|'replace'|undefined} [mode] write mode, 'merge' will merge the new config with the old one, 'replace' will replace the old config with the new one (default to 'merge')
     * @property {boolean|undefined} [useIniGroup=false] use ini groupping, use keys in the first level as groupName
-    * @property {boolean|undefined} alwaysWrapStrInQuotes always wrap string in quotes even if it's not required (doesn't have space, special char, etc.)
+    * @property {boolean|undefined} [alwaysWrapStrInQuotes] always wrap string in quotes even if it's not required (doesn't have space, special char, etc.)
     */
    /**
     * asynchronously write configuration to the given path
@@ -4585,19 +5348,107 @@ const Tools = {
 
       Tools._modules.fs.writeFileSync(path, savedConfig, { encoding: 'utf-8' });
    },
+
+
+
+   /**
+    * @typedef {Object} YukaToStringOptions
+    * @property {boolean} [color=false] whether to color the output
+    * @property {NCCColorOptions} [defColor=undefined] efault color, used for reseting the color
+    * without this, the will be reset all color and style to default
+    */
+   /**
+    * advanced `toString()` method that can handle more complex object.
+    *
+    * say goodbye to `[object Object]` Yuka will never allow that!
+    * @param {any} whatever anything that you want to convert to string
+    * @param {YukaToStringOptions} [options={}]
+    */
+   yuString(whatever, options = {}){
+      const { color = false, defColor = undefined } = options;
+
+      switch(typeof whatever){
+         case 'string':
+            if(color)
+               return Tools.ncc('Green') + `"${whatever}"` + Tools.ncc(defColor);
+            return `"${whatever}"`;
+         case 'bigint':
+         case 'number':
+            if(color)
+               return Tools.ncc(0xc2412b) + whatever + Tools.ncc(defColor);
+         case 'boolean':
+         case 'undefined':
+            if(color)
+               return Tools.ncc(0xc87086) + whatever + Tools.ncc(defColor);
+            return whatever + '';
+         case 'function':
+            if(color){ // TODO: support for generator function
+               return (Tools.isAsyncFunction(whatever)? Tools.ncc(0x494949) + 'async ': '') + (
+                  Tools.isArrowFunction(whatever)
+                  ? Tools.ncc(0xcc7f37) + (whatever.name || Tools.ncc(0x494949) + '[anonymous]'+ Tools.ncc(0xcc7f37)) + ' () => {...}'
+                  : Tools.ncc(0xcc7f37) + (whatever.name || Tools.ncc(0x494949) + '[anonymous]'+ Tools.ncc(0xcc7f37)) + '()'
+               ) + Tools.ncc(defColor);
+            }
+            return  (Tools.isAsyncFunction(whatever)? 'async ': '') +
+               (Tools.isArrowFunction(whatever)
+               ? (whatever.name || '[anonymous]') + ' () => {...}'
+               : (whatever.name || '[anonymous]') + '()');
+         case 'symbol':
+            if(color)
+               return Tools.ncc(0xcc7f37) + whatever.toString() + Tools.ncc(defColor);
+            return whatever.toString();
+      }
+
+      // the rest are "object"
+      if(whatever == null){ // null or undefined
+         if(color)
+            return Tools.ncc(0xc87086) + whatever + Tools.ncc(defColor);
+         return whatever + '';
+      }
+
+
+      if(whatever instanceof Promise)
+         return Tools.ncc(0xb03fba) + 'Promise' + Tools.ncc(defColor) + ' {...(pending)}';
+
+      if(whatever instanceof Map){
+         const values = [...whatever.entries()]
+         return (color
+            ? Tools.ncc(0xb03fba) + `Map(${whatever.size}) {` + Tools.ncc(defColor)
+            : `Map(${whatever.size}) {`
+         ) + Tools.arrToString(values, { color, defColor, noHeader: true }) + '}';
+      }
+
+      if(whatever instanceof Set){
+         const values = [...whatever.values()];
+         return (color
+            ? Tools.ncc(0xb03fba) + `Set(${whatever.size}) {` + Tools.ncc(defColor)
+            : `Set(${whatever.size}) {`
+         ) + Tools.arrToString(values, { color, defColor, noHeader: true }) + '}';
+      }
+
+      if(Tools.isError(whatever)){
+         return Tools.Err.toString(whatever, { color, defColor });
+      }
+
+      try{
+         if(typeof whatever === 'object'){
+            if(Tools.isArrayLike(whatever)){
+               return Tools.arrToString(whatever, { color, defColor });
+            }
+
+            // TODO: add syntax highlighting for object
+            let itemCount = Object.keys(whatever).length;
+            return JSON.stringify(whatever, Tools.JSONReplacer, itemCount > 5? 3: null);
+         }
+      }catch{}
+
+      return '[unknown]'; // TODO: unable to parse some custom object like `sqlite3.Database`
+   }
 }
 
 
 
-/////////////////////   extension   ///////////////////////
-//"extension" function of Object `Number` that returns length of digits of Number
-Number.prototype.length = function length(){
-   return (this+'').replace(/[.e]/ig, '').length;
-};
-
-
-String.prototype.redexOf = Tools.redexOf;
-
 
 if(typeof module !== 'undefined') module.exports = Tools;
+// @ts-expect-error _tools doesn't exist on window
 if(typeof window !== 'undefined') window._tools = Tools;
