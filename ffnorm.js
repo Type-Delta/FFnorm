@@ -33,7 +33,7 @@ const {
 } = require('./Tools');
 
 
-const VERSION = '1.0.4';
+const VERSION = '1.0.5';
 const eventEmitter = new EventEmitter();
 const ParamTemplate = {
    targetLUFS: {
@@ -73,6 +73,9 @@ const ParamTemplate = {
       pattern: ['-r', '--ratio'],
       default: 0.78,
       type: 'float'
+   },
+   outputFormat: {
+      pattern: ['-f', '--format'],
    },
    input: {
       pattern: ['-i', '--input'],
@@ -137,6 +140,12 @@ ${ncc('magenta')}Usage:
    How much Normalization is apply in percentage, 1.0 is 100%
    lower this value to prevent over-shooting
    (default to ${ParamTemplate.normRatio.default})
+
+   ${ncc('bgWhite')+ncc('black')}  '-f', '--format'  ${ncc()}
+   wrapper for ffmpeg '-f' option.
+   this option specify Output format of output files
+   (default to whatever the input format is)
+   (this option is omitted for scan mode)
 
    ${ncc('bgWhite')+ncc('black')}  '-st', '--scanthread'  ${ncc()}
    Max number of Threads for loudness scanning
@@ -388,7 +397,7 @@ async function normMode(){
    await normalizeFiles(args.input.value, fileInfo);
 
    console.log(
-      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget: ${ncc('cyan')+(args.targetLUFS)+'LUFS'+ncc()}\nMax Offest: ${ncc('cyan')+'+-'+args.LUFSMaxOffset+'LUFS'+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
+      `\n${ncc('green')}Normalization Completed${ncc()}\n------------------------------------------\n${ncc()}Normalized: ${ncc('cyan')+nrTotal+ncc()}\nSkipped: ${ncc('cyan')+(scTotal- nrTotal)+ncc()}\nTarget: ${ncc('cyan')+(args.targetLUFS)+'LUFS'+ncc()}\nMax Offest: ${ncc('cyan')+'±'+args.LUFSMaxOffset+'LUFS'+ncc()}\nNormalization Ratio: ${ncc('cyan')+(args.normRatio)+ncc()}`
    );
 }
 
@@ -529,7 +538,8 @@ async function normalizeFiles(folder, fileObjArr){
                fileObjArr[i].name,
                fileObjArr[i].normalize,
                fileObjArr[i].bitrate? fileObjArr[i].bitrate: defaultBitrate,
-               args.ffmpeg_qscale.value
+               args.ffmpeg_qscale.value,
+               args.outputFormat.value
             )
          );
 
@@ -591,14 +601,18 @@ function getloudness(filePath, i){
 /**
  * @returns {Promise<void>}
  */
-function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1){
+function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1, format = null){
    return new Promise(async (resolve, reject) => {
       const tags = await NodeID3.read(inputStats.isFile()? inputFolder:path.join(inputFolder, fileName));
       const useID3v2 = propertiesCount(tags) > 1;
 
       if(outputIsFile){
+         const fileNameNoExt = path.basename(inputFolder, path.extname(fileName));
+         const outputPath = format
+            ? path.join(path.dirname(outputFolder), fileNameNoExt + '.' + format)
+            : outputFolder;
          exec(
-            `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy "${outputFolder}"`,
+            `ffmpeg -hide_banner -y -i "${inputFolder}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''}${format? ' -f ' + format: ''}  ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy "${outputPath}"`,
             async (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
 
@@ -609,8 +623,14 @@ function applyGain(inputFolder, outputFolder, fileName, dB, bitrate, qscale = -1
          );
 
       }else{
+         const fileNameNoExt = fileName.slice(0, fileName.lastIndexOf('.'));
+         const outputPath = path.join(outputFolder,
+            format
+               ? fileNameNoExt + '.' + format
+               : fileName
+         );
          exec(
-            `ffmpeg -hide_banner -y -i "${path.join(inputFolder, fileName)}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy  "${path.join(outputFolder, fileName)}"`,
+            `ffmpeg -hide_banner -y -i "${path.join(inputFolder, fileName)}" -movflags use_metadata_tags -map_metadata 0 ${useID3v2?'-id3v2_version 3':''}${format? ' -f ' + format: ''} ${qscale==-1?'':'-q:a ' + qscale} -af "volume=${dB.toFixed(3)}dB" ${qscale==-1?'-b:a '+bitrate:''} -c:v copy  "${outputPath}"`,
             async (err, stdout, stderr) => {
                if(err) console.error(err, stderr);
 
