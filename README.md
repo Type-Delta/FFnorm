@@ -1,9 +1,6 @@
 # FFnorm
 
-automatic audio Normalization tool
-powered by **FFmpeg**
-for normalizing large batch of files.
-
+automatic audio Normalization tool powered by **FFmpeg** for normalizing large batch of files.
 
 ## Installations
 
@@ -63,9 +60,10 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 |`'norm'`, `'--norm'`, `'-n'`| Normalize mode - scan Audio loudness of file/folder contents and normalize them according to the Target loudness set by '-t' option.| (No Value needed for this option) | None |  (this option **requires Output file/folder**) |
 | `'scan'`,`'--scan'`, `'-s'` | Scan Audio loudness and report them on the terminal. | (No Value needed for this option)| None |
 | `'-t'`, `'--target'` | Target Loudness in LUFS | float | `-14.4` (LUFS) (*YouTube* standard loudness) | |
+|`'-q`', `'--qscale'`, `-qscale` | FFmpeg Quality Scale flag, this is to prevent losses during normalization. while the program tells FFmpeg to keep output bitrate as the same as input, there's still some losses being generated (if the media isn't lossless) due to compression over compression, each time the quality is going to get worse for the same bitrate. set *qscale* to a lower values result in a better quality `0` is *lossless*. | int | `2` | `2` or `3` is what I think is the sweet spot, the file is quite heavy but it genuinely makes the losses invisible.  **For someone who'd like to Disable this option**: set *qscale* to `-1` (`-q -1`) |
 | `'-of'`, `'--offset'`| Max offset fron Target loudness before normalization become active. | float | `1.3` (LUFS) | |
 |`'-r`', `'--ratio'` | How much Normalization is apply in percentage, 1.0 is 100% lower this value to prevent over-shooting | float | `0.78` (78%) | |
-|`'-q`', `'--qscale'`, `-qscale` | FFmpeg Quality Scale flag, this is to prevent losses during normalization. while the program tells FFmpeg to keep output bitrate as the same as input, there's still some losses being generated (if the media isn't lossless) due to compression over compression, each time the quality is going to get worse for the same bitrate. set *qscale* to a lower values result in a better quality `0` is *lossless*. | int | `2` | `2` or `3` is what I think is the sweet spot, the file is quite heavy but it genuinely makes the losses invisible.  **For someone who'd like to Disable this option**: set *qscale* to `-1` (`-q -1`) |
+|`'-f`', `'--format'` | wrapper for ffmpeg '-f' option. this option specify Output format of output files | string | (whatever the input format is) | this option is omitted for scan mode |
 |`'-st'`,`'--scanthread'`| Max number of Threads for loudness scanning | int | `64` (threads) | |
 |`'-nt'`, `'--normthread'`| Max number of Threads for audio normalization | int |`32` (threads)| |
 |`'-v'`, `'--version'`| prints program version and exit. | (No Value needed for this option) | None | has to be the first option to work |
@@ -84,6 +82,7 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 > - mov
 > - wav
 > - webm
+> - ogg
 
 ---------------
 
