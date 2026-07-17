@@ -5,7 +5,7 @@
  *
  * FFmpeg Commands use:
  * - getting audio loudness
- * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}""`
+ * > `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null -`
  * - getting audio bitrate
  * > `ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1  audio.wav"`
  * - modifying audio Gains
@@ -16,7 +16,7 @@
 **/
 
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const NodeID3 = require('node-id3').Promise;
 const path = require('node:path');
 const EventEmitter = require('events');
@@ -589,11 +589,39 @@ function getAudioBitrate(filePath) {
 
 function getloudness(filePath, i) {
    return new Promise((resolve) => {
-      exec(`ffmpeg -hide_banner -i "${filePath}" -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`, (err, stdout, stderr) => {
-         if (err || stderr) console.error(err, stderr);
-         eventEmitter.emit('scanloop', 1);
+      const ffmpeg = spawn('ffmpeg', [
+         '-hide_banner',
+         '-i', filePath,
+         '-af', 'ebur128=framelog=verbose',
+         '-f', 'null',
+         '-'
+      ]);
+      let loudness = NaN;
+      let errorOutput = '';
+      let pendingLine = '';
 
-         resolve([parseFloat(stdout), filePath.split(/[/\\]/g).at(-1), i]);
+      const parseLoudness = (output) => {
+         // The final ebur128 report contains a standalone "I:" line. Parsing
+         // that line avoids confusing it with periodic frame-log entries.
+         const match = output.match(/^\s*I:\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s+LUFS\s*$/m);
+         if (match) loudness = parseFloat(match[1]);
+      };
+
+      ffmpeg.stderr.on('data', (chunk) => {
+         const lines = (pendingLine + chunk).split(/\r?\n/);
+         pendingLine = lines.pop();
+         for (const line of lines) parseLoudness(line);
+      });
+
+      ffmpeg.on('error', (err) => {
+         errorOutput += err.message;
+      });
+
+      ffmpeg.on('close', (code) => {
+         parseLoudness(pendingLine);
+         if (code !== 0 || errorOutput) console.error(errorOutput || `ffmpeg exited with code ${code}`);
+         eventEmitter.emit('scanloop', 1);
+         resolve([loudness, filePath.split(/[/\\]/g).at(-1), i]);
       });
    });
 }

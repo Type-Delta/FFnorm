@@ -4,13 +4,11 @@ automatic audio Normalization tool powered by **FFmpeg** for normalizing large b
 
 ## Installations
 
-Required dependencies are **FFmpeg**, **FFprobe** (shipped with FFmpeg), **AWK** and **Node.js** (if using [Executables](https://github.com/Type-Delta/FFnorm/releases), Node.js is **unnecessary**).
+Required dependencies are **FFmpeg**, **FFprobe** (shipped with FFmpeg), and **Node.js** (if using [Executables](https://github.com/Type-Delta/FFnorm/releases), Node.js is **unnecessary**).
 
 didn't have them?
 
 Download [FFmpeg](https://ffmpeg.org/download.html) or [Node.js](https://nodejs.org/en/download)
-
-for **AWK** see [installation guide](https://bobbyhadz.com/blog/install-awk-on-windows)
 
 ## Usage
 you can either run the [Executable](https://github.com/Type-Delta/FFnorm/releases) directly:
@@ -88,7 +86,9 @@ ffnorm norm -i ./test -of 2 ./test/norm/
 
 #### FFmpeg Commands use:
 - getting audio loudness
-> `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null - 2>&1 | awk "/I:/{print $2}"`
+> `ffmpeg -hide_banner -i audio.wav -af ebur128=framelog=verbose -f null -`
+
+FFnorm reads the integrated loudness report from FFmpeg directly in JavaScript.
 - getting audio bitrate
 > `ffprobe -v fatal -select_streams a:0 -show_entries stream=bit_rate -of compact=p=0:nk=1  audio.wav"`
 - modifying audio Gains
